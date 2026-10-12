@@ -1,0 +1,14 @@
+{
+  "version": "6.0.0",
+  "baseVersion": "5.1.3",
+  "baseSha256": "939D778D315E609E5E6593D1AF3C0FFF0590FF0DE79D902E81A48304924E84F3",
+  "implementationSha256": "EC2A9440175B397C18AFE3EF2A2381E84310AAE8A09206CA2E2B1548C0A3BC4E",
+  "frontendEntry": "dist/index.html",
+  "backendEntry": "functions/api/state.ts",
+  "kvBinding": "CHALAK_DB",
+  "productionDeployed": false,
+  "validation": "LOCAL VERIFIED",
+  "cleanInstall": true,
+  "finalBuildExitCode": 0,
+  "note": "Production package excludes test dependencies/scripts. Functions must be deployed with the source root using Wrangler; frontend-only upload is insufficient."
+}

@@ -1,0 +1,11 @@
+# Personnel and save contract
+
+`pe_employees` remains the only employee registry. Stable `id`; unique exact normalized `code` preserves leading zeros/separators, Persian/Arabic digits become Latin. Names never identify a person. Optional approved title/description, employment dates/status, shift, effective date, source/reference and server-controlled personnel revision/update timestamp enrich existing records. Existing history remains in server audit/evaluations; no second identity database.
+
+Dates: valid Jalali business dates; Gregorian ISO date/Excel Date values are converted using existing calendar helpers. Blank imported fields preserve existing values. Unknown/invalid text never becomes numeric zero. Real headers use separate name/surname, original and updated shift, and primary/secondary job-title aliases. Conflicting columns/rows/owners require review; a first/last row never wins a conflict silently.
+
+Preview: NEW / EXISTING_UNCHANGED / EXISTING_UPDATED / DUPLICATE_IN_FILE / CONFLICT / INACTIVE / INVALID / NEEDS_REVIEW; before/after and reason shown. Missing identities do not imply deletion. Inactive employees never reactivate from presence; historical secondary records without approved current status remain review-only. New active records require explicit reviewed main-source approval, reference, effective date and profile. Inactive/unknown cannot sign in or start a new evaluation; existing historical evaluations remain intact.
+
+Save: stable operation ID, expected state revision, authenticated actor, changed employee entities (`employeePatch`), ordinary master-data permissions/relationships, receipt hash includes mutation mode. Server merges without interpreting omissions as deletions, increments accepted personnel revision, preserves audit and returns accepted state. Managed client success follows ACK; recovery stores prepared state locally, 401/403/409/503 do not erase the form. Uncertain outcomes check receipts before retry; unavailable authoritative receipt blocks retry. Header mapping is a browser-local preference, not a business write.
+
+Reactive state: existing accepted-state events/BroadcastChannel/30-second polling are retained, with React employee props invalidated from the authoritative accepted collection. No instantaneous global KV consistency claim. No database migration without evidence and owner approval.
