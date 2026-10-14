@@ -1,5 +1,5 @@
 // Single source of truth for the V7 two-service topology. Every script and test imports this.
-export const VERSION = '8.0.0';
+export const VERSION = '8.1.0';
 export const BASE = { version: '7.0.0', gitCommit: '15bddd2', note: 'V7 as deployed to production (branch main of chalak-app-V6)' };
 export const WRANGLER_VERSION = '4.131.2';
 export const NODE_MAJOR = 24;

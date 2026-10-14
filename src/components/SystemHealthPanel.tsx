@@ -21,6 +21,7 @@ interface HealthResponse {
 
 const METRIC_LABELS: [string, string][] = [
   ['commits', 'ذخیره موفق'],
+  ['rebased', 'ادغام خودکار'],
   ['conflicts', 'تعارض (۴۰۹)'],
   ['rejected', 'ردشده'],
   ['failures', 'خطای سرور'],

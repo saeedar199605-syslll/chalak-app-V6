@@ -35,7 +35,7 @@ ok('access-control', { anonymous: 401, employee: 403, adminPost: 405 });
 // 2. health reflects real state and counters
 const h = await health();
 const publicHealth = await (await fetch(pages + '/api/health')).json() as any;
-assert.equal(h.version, '8.0.0'); assert.equal(h.revision, publicHealth.revision); assert.equal(h.mode, 'active'); assert(h.totalApproxBytes > 0);
+assert.equal(h.version, '8.1.0'); assert.equal(h.revision, publicHealth.revision); assert.equal(h.mode, 'active'); assert(h.totalApproxBytes > 0);
 const employees = h.collections.find((c: any) => c.collection === 'pe_employees');
 assert.equal(employees.records, 3);
 const sum = (name: string) => h.metrics.filter((m: any) => m.name === name).reduce((s: number, m: any) => s + m.n, 0);

@@ -121,7 +121,7 @@ function prepare() {
   fs.writeFileSync(entry, fs.readFileSync(entry, 'utf8').replace(/functionsRoutes_0_\d+/g, 'functionsRoutes_0_0').replace(/\.wrangler\/tmp\/pages-[A-Za-z0-9]+\/functionsRoutes-0\.\d+\.mjs/g, '.wrangler/tmp/pages-build/functionsRoutes-0.mjs'));
   // The Functions build emits its own routing; keep _routes.json from public/ for the static/Functions split.
   fs.copyFileSync(path.join(sourceRoot, 'public/_routes.json'), path.join(rel, 'pages/_routes.json'));
-  fs.writeFileSync(path.join(rel, 'pages/release.json'), JSON.stringify({ name: 'chalak-performance', version: C.VERSION, base: C.BASE.version, storage: 'sqlite-durable-object', protocolVersion: 2, features: ['admin-health', 'backup-download', ...(C.R2_BACKUP_ENABLED ? ['scheduled-backup-r2'] : []), 'operator-snapshot', 'restore'] }, null, 2));
+  fs.writeFileSync(path.join(rel, 'pages/release.json'), JSON.stringify({ name: 'chalak-performance', version: C.VERSION, base: C.BASE.version, storage: 'sqlite-durable-object', protocolVersion: 2, features: ['admin-health', 'backup-download', ...(C.R2_BACKUP_ENABLED ? ['scheduled-backup-r2'] : []), 'operator-snapshot', 'restore', 'safe-rebase'] }, null, 2));
   fs.writeFileSync(path.join(rel, 'pages/wrangler.jsonc'), JSON.stringify({
     name: C.PAGES_DEFAULT_NAME, compatibility_date: C.COMPATIBILITY_DATE, compatibility_flags: ['nodejs_compat'], pages_build_output_dir: '.',
     kv_namespaces: [{ binding: C.KV_BINDING, id: C.KV_NAMESPACE_ID }],

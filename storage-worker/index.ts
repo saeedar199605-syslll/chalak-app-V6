@@ -6,13 +6,13 @@ import { sealSnapshot,verifySnapshot,type StateBackup } from '../cloudflare/stat
 import type { CloudState } from '../cloudflare/syncState';
 import type { StateMeta,OperationReceipt,TransactionStore,StatePatch } from '../cloudflare/transactionStore';
 interface Env extends CloudflareEnv {STORAGE_MAINTENANCE_TOKEN?:string;CHALAK_BACKUPS?:R2Bucket}
-const AUTHORITY_NAME='chalak-authoritative-state-v1',BACKUP_PREFIX='backups/',BACKUP_KEEP=30,METRIC_DAYS=60;
+const CHANGE_LOG_KEEP=1000,AUTHORITY_NAME='chalak-authoritative-state-v1',BACKUP_PREFIX='backups/',BACKUP_KEEP=30,METRIC_DAYS=60;
 const isoDay=(offsetDays=0)=>new Date(Date.now()+offsetDays*86400000).toISOString().slice(0,10);
 const chunks=(text:string)=>{const result:string[]=[];for(let i=0;i<text.length;){let end=Math.min(i+64000,text.length);if(end<text.length&&text.charCodeAt(end-1)>=0xD800&&text.charCodeAt(end-1)<=0xDBFF)end--;result.push(text.slice(i,end));i=end;}return result.length?result:[''];};
 function patchable(value:unknown):value is Array<{id:string}> {return Array.isArray(value)&&value.every(row=>row&&typeof row==='object'&&typeof row.id==='string')&&new Set(value.map(r=>r.id)).size===value.length;}
 export class ChalakState extends DurableObject<Env> implements TransactionStore {
  private cache:CloudState|undefined;
- constructor(ctx:DurableObjectState,env:Env){super(ctx,env);ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS control(id INTEGER PRIMARY KEY CHECK(id=1),initialized INTEGER NOT NULL,mode TEXT NOT NULL,meta TEXT NOT NULL,migration_hash TEXT);INSERT OR IGNORE INTO control VALUES(1,0,'frozen','{"revision":0,"updatedAt":""}',NULL);CREATE TABLE IF NOT EXISTS collections(key TEXT PRIMARY KEY,kind TEXT NOT NULL);CREATE TABLE IF NOT EXISTS state_rows(collection TEXT NOT NULL,identity TEXT NOT NULL,ordinal INTEGER NOT NULL,part INTEGER NOT NULL,value TEXT NOT NULL,PRIMARY KEY(collection,identity,part));CREATE INDEX IF NOT EXISTS state_order ON state_rows(collection,ordinal,part);CREATE TABLE IF NOT EXISTS receipts(operation_id TEXT PRIMARY KEY,value TEXT NOT NULL);CREATE TABLE IF NOT EXISTS metrics(day TEXT NOT NULL,name TEXT NOT NULL,n INTEGER NOT NULL,PRIMARY KEY(day,name));CREATE TABLE IF NOT EXISTS backup_log(id INTEGER PRIMARY KEY AUTOINCREMENT,at TEXT NOT NULL,kind TEXT NOT NULL,status TEXT NOT NULL,revision INTEGER,sha256 TEXT,bytes INTEGER,detail TEXT);`);}
+ constructor(ctx:DurableObjectState,env:Env){super(ctx,env);ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS control(id INTEGER PRIMARY KEY CHECK(id=1),initialized INTEGER NOT NULL,mode TEXT NOT NULL,meta TEXT NOT NULL,migration_hash TEXT);INSERT OR IGNORE INTO control VALUES(1,0,'frozen','{"revision":0,"updatedAt":""}',NULL);CREATE TABLE IF NOT EXISTS collections(key TEXT PRIMARY KEY,kind TEXT NOT NULL);CREATE TABLE IF NOT EXISTS state_rows(collection TEXT NOT NULL,identity TEXT NOT NULL,ordinal INTEGER NOT NULL,part INTEGER NOT NULL,value TEXT NOT NULL,PRIMARY KEY(collection,identity,part));CREATE INDEX IF NOT EXISTS state_order ON state_rows(collection,ordinal,part);CREATE TABLE IF NOT EXISTS receipts(operation_id TEXT PRIMARY KEY,value TEXT NOT NULL);CREATE TABLE IF NOT EXISTS metrics(day TEXT NOT NULL,name TEXT NOT NULL,n INTEGER NOT NULL,PRIMARY KEY(day,name));CREATE TABLE IF NOT EXISTS change_log(revision INTEGER NOT NULL,collection TEXT NOT NULL,identity TEXT NOT NULL);CREATE INDEX IF NOT EXISTS change_log_rev ON change_log(revision);CREATE TABLE IF NOT EXISTS log_floor(id INTEGER PRIMARY KEY CHECK(id=1),revision INTEGER NOT NULL);INSERT OR IGNORE INTO log_floor SELECT 1,COALESCE(json_extract(meta,'$.revision'),0) FROM control WHERE id=1;CREATE TABLE IF NOT EXISTS backup_log(id INTEGER PRIMARY KEY AUTOINCREMENT,at TEXT NOT NULL,kind TEXT NOT NULL,status TEXT NOT NULL,revision INTEGER,sha256 TEXT,bytes INTEGER,detail TEXT);`);}
  // Observability counters never affect a request: any failure here is swallowed.
  private bump(name:string){try{const sql=this.ctx.storage.sql;sql.exec('INSERT INTO metrics(day,name,n) VALUES(?,?,1) ON CONFLICT(day,name) DO UPDATE SET n=n+1',isoDay(),name);sql.exec('DELETE FROM metrics WHERE day<?',isoDay(-METRIC_DAYS));}catch{}}
  private logBackup(kind:string,status:string,revision:number|null,sha256:string|null,bytes:number|null,detail:string){try{this.ctx.storage.sql.exec('INSERT INTO backup_log(at,kind,status,revision,sha256,bytes,detail) VALUES(?,?,?,?,?,?,?)',new Date().toISOString(),kind,status,revision,sha256,bytes,detail.slice(0,300));this.ctx.storage.sql.exec('DELETE FROM backup_log WHERE id NOT IN (SELECT id FROM backup_log ORDER BY id DESC LIMIT 200)');}catch{}}
@@ -26,7 +26,7 @@ export class ChalakState extends DurableObject<Env> implements TransactionStore 
   const metrics=sql.exec<{day:string;name:string;n:number}>('SELECT day,name,n FROM metrics WHERE day>=? ORDER BY day DESC',isoDay(-6)).toArray();
   const backups=sql.exec<{at:string;kind:string;status:string;revision:number|null;sha256:string|null;bytes:number|null;detail:string}>('SELECT at,kind,status,revision,sha256,bytes,detail FROM backup_log ORDER BY id DESC LIMIT 12').toArray();
   const lastOk=backups.find(b=>b.status==='ok'&&b.kind==='scheduled')||null;
-  return {version:'8.0.0',storage:'sqlite-durable-object',mode:c.mode,initialized:!!c.initialized,revision:meta.revision,updatedAt:meta.updatedAt,updatedBy:meta.updatedBy||null,
+  return {version:'8.1.0',storage:'sqlite-durable-object',mode:c.mode,initialized:!!c.initialized,revision:meta.revision,updatedAt:meta.updatedAt,updatedBy:meta.updatedBy||null,
    receipts:sql.exec<{n:number}>('SELECT COUNT(*) AS n FROM receipts').one().n,totalApproxBytes:collections.reduce((s,r)=>s+(r.approxBytes||0),0),collections,metrics,backups,lastScheduledBackup:lastOk,
    backupTarget:{r2Bound:!!this.env.CHALAK_BACKUPS,keep:BACKUP_KEEP,schedule:'daily 00:00 UTC'},now:new Date().toISOString()};
  }
@@ -70,7 +70,7 @@ export class ChalakState extends DurableObject<Env> implements TransactionStore 
   this.ctx.storage.sql.exec('DELETE FROM state_rows WHERE collection=? AND identity=?',key,id);metrics.sqlWrites++;
   chunks(text).forEach((chunk,part)=>{this.ctx.storage.sql.exec('INSERT INTO state_rows(collection,identity,ordinal,part,value) VALUES(?,?,?,?,?)',key,id,ordinal,part,chunk);metrics.sqlWrites++;});
  }
- private persist(current:CloudState,next:CloudState):StatePatch{
+ private persist(current:CloudState,next:CloudState,touched:Array<[string,string]>=[]):StatePatch{
   const ack:StatePatch={state:{},replacementKeys:[],deletedStateIds:{},metrics:{serializedRecords:0,auditRecords:0,evaluationRecords:0,sqlWrites:0}};
   for(const [key,value] of Object.entries(next)){
    if(key==='__operation_receipts'||value===current[key])continue;
@@ -79,26 +79,34 @@ export class ChalakState extends DurableObject<Env> implements TransactionStore 
     if(!Array.isArray(value)||old!==undefined&&!Array.isArray(old))throw Error('Invalid audit');
     const previous=(old||[]) as unknown[];const first=previous[0];const prefix=first===undefined?value.length:value.indexOf(first);
     if(prefix<0||value.length!==prefix+previous.length||previous.length>0&&value[value.length-1]!==previous[previous.length-1])throw Error('Audit history is append-only');
-    this.ctx.storage.sql.exec('INSERT OR REPLACE INTO collections(key,kind) VALUES(?,?)',key,'audit');
+    this.ctx.storage.sql.exec('INSERT OR REPLACE INTO collections(key,kind) VALUES(?,?)',key,'audit');touched.push([key,'+']);
     const min=this.ctx.storage.sql.exec<{n:number|null}>('SELECT MIN(ordinal) AS n FROM state_rows WHERE collection=?',key).one().n??0;
     value.slice(0,prefix).forEach((row,i)=>this.writeRecord(key,crypto.randomUUID(),min-prefix+i,row,ack.metrics));continue;
    }
    if(patchable(value)&&(!old||patchable(old))){
     const before=(old||[]) as Array<{id:string}>;const beforeMap=new Map(before.map((v,i)=>[v.id,{v,i}]));const afterIds=new Set(value.map(v=>v.id));
     ack.state[key]=[];this.ctx.storage.sql.exec('INSERT OR REPLACE INTO collections(key,kind) VALUES(?,?)',key,'array');
-    for(const row of before)if(!afterIds.has(row.id)){this.ctx.storage.sql.exec('DELETE FROM state_rows WHERE collection=? AND identity=?',key,row.id);(ack.deletedStateIds[key]||=[]).push(row.id);ack.metrics.sqlWrites++;}
-    value.forEach((row,i)=>{const previous=beforeMap.get(row.id);if(row!==previous?.v){this.writeRecord(key,row.id,i,row,ack.metrics);(ack.state[key] as unknown[]).push(row);}else if(previous.i!==i){this.ctx.storage.sql.exec('UPDATE state_rows SET ordinal=? WHERE collection=? AND identity=?',i,key,row.id);ack.metrics.sqlWrites++;}});
+    for(const row of before)if(!afterIds.has(row.id)){this.ctx.storage.sql.exec('DELETE FROM state_rows WHERE collection=? AND identity=?',key,row.id);(ack.deletedStateIds[key]||=[]).push(row.id);touched.push([key,row.id]);ack.metrics.sqlWrites++;}
+    value.forEach((row,i)=>{const previous=beforeMap.get(row.id);if(row!==previous?.v){this.writeRecord(key,row.id,i,row,ack.metrics);(ack.state[key] as unknown[]).push(row);touched.push([key,row.id]);}else if(previous.i!==i){this.ctx.storage.sql.exec('UPDATE state_rows SET ordinal=? WHERE collection=? AND identity=?',i,key,row.id);ack.metrics.sqlWrites++;}});
    }else{
-    this.ctx.storage.sql.exec('DELETE FROM state_rows WHERE collection=?',key);this.ctx.storage.sql.exec('INSERT OR REPLACE INTO collections(key,kind) VALUES(?,?)',key,'json');this.writeRecord(key,'json',0,value,ack.metrics);ack.state[key]=value;ack.replacementKeys.push(key);
+    this.ctx.storage.sql.exec('DELETE FROM state_rows WHERE collection=?',key);this.ctx.storage.sql.exec('INSERT OR REPLACE INTO collections(key,kind) VALUES(?,?)',key,'json');this.writeRecord(key,'json',0,value,ack.metrics);ack.state[key]=value;ack.replacementKeys.push(key);touched.push([key,'*']);
    }
   }
   return ack;
+ }
+ // Which records changed after `base`? Complete only inside the retained window and after the last migration/restore.
+ changesSince(base:number):{complete:boolean;entries:Array<{collection:string;identity:string}>}{
+  const sql=this.ctx.storage.sql,floor=sql.exec<{revision:number}>('SELECT revision FROM log_floor WHERE id=1').one().revision,revision=(JSON.parse(this.control().meta) as StateMeta).revision;
+  if(!Number.isInteger(base)||base<floor||base>revision||revision-base>CHANGE_LOG_KEEP)return {complete:false,entries:[]};
+  return {complete:true,entries:sql.exec<{collection:string;identity:string}>('SELECT collection,identity FROM change_log WHERE revision>? AND revision<=?',base,revision).toArray()};
  }
  commit(current:CloudState,next:CloudState,expectedRevision:number,meta:StateMeta,receipt:OperationReceipt):StatePatch {
   let result:StatePatch;
   this.ctx.storage.transactionSync(()=>{
    const c=this.control();if(c.mode!=='active'||!c.initialized||JSON.parse(c.meta).revision!==expectedRevision||meta.revision!==expectedRevision+1||receipt.acceptedRevision!==meta.revision||this.receipt(receipt.operationId))throw Error('Atomic precondition failed');
-   result=this.persist(current,next);
+   const touched:Array<[string,string]>=[];result=this.persist(current,next,touched);
+   for(const [collection,identity] of touched)this.ctx.storage.sql.exec('INSERT INTO change_log(revision,collection,identity) VALUES(?,?,?)',meta.revision,collection,identity);
+   this.ctx.storage.sql.exec('DELETE FROM change_log WHERE revision<=?',meta.revision-CHANGE_LOG_KEEP);
    this.ctx.storage.sql.exec('INSERT INTO receipts(operation_id,value) VALUES(?,?)',receipt.operationId,JSON.stringify(receipt));
    this.ctx.storage.sql.exec('UPDATE control SET meta=? WHERE id=1',JSON.stringify(meta));
   });
@@ -120,6 +128,7 @@ export class ChalakState extends DurableObject<Env> implements TransactionStore 
     const {__operation_receipts:receipts,...state}=backup.state;
     this.persist({},state);
     for(const receipt of (receipts||[]) as OperationReceipt[])this.ctx.storage.sql.exec('INSERT INTO receipts(operation_id,value) VALUES(?,?)',receipt.operationId,JSON.stringify(receipt));
+    this.ctx.storage.sql.exec('DELETE FROM change_log');this.ctx.storage.sql.exec('INSERT OR REPLACE INTO log_floor(id,revision) VALUES(1,?)',backup.meta.revision);
     this.ctx.storage.sql.exec("UPDATE control SET initialized=1,mode='frozen',meta=?,migration_hash=? WHERE id=1",JSON.stringify(backup.meta),backup.sha256);
    });this.cache=undefined;return jsonResponse({migrated:true,revision:backup.meta.revision,sha256:backup.sha256,counts:backup.counts});
   }
@@ -150,6 +159,7 @@ export class ChalakState extends DurableObject<Env> implements TransactionStore 
     const {__operation_receipts:receipts,...state}=backup.state;
     this.persist({},state);
     for(const receipt of (receipts||[]) as OperationReceipt[])sql.exec('INSERT INTO receipts(operation_id,value) VALUES(?,?)',receipt.operationId,JSON.stringify(receipt));
+    sql.exec('DELETE FROM change_log');sql.exec('INSERT OR REPLACE INTO log_floor(id,revision) VALUES(1,?)',nextRevision);
     sql.exec("UPDATE control SET meta=?,migration_hash=? WHERE id=1",JSON.stringify({...backup.meta,revision:nextRevision,updatedAt:new Date().toISOString(),updatedBy:'restore'}),backup.sha256);
    });
    this.cache=undefined;this.logBackup('restore','ok',nextRevision,backup.sha256,null,'restored backup revision '+backup.meta.revision);this.bump('restores');
@@ -164,7 +174,7 @@ export class ChalakState extends DurableObject<Env> implements TransactionStore 
     const path=new URL(request.url).pathname;
     if(path==='/api/storage')return await this.maintenance(request);
     const c=this.control();
-    if(path==='/internal/health')return jsonResponse({status:c.initialized&&c.mode==='active'?'ok':'maintenance',storage:'sqlite-durable-object',version:'8.0.0',revision:JSON.parse(c.meta).revision,initialized:!!c.initialized,mode:c.mode},c.initialized&&c.mode==='active'?200:503);
+    if(path==='/internal/health')return jsonResponse({status:c.initialized&&c.mode==='active'?'ok':'maintenance',storage:'sqlite-durable-object',version:'8.1.0',revision:JSON.parse(c.meta).revision,initialized:!!c.initialized,mode:c.mode},c.initialized&&c.mode==='active'?200:503);
     if(!c.initialized)return jsonResponse({error:'مرجع تراکنشی هنوز مهاجرت و تأیید نشده است.',code:'migration_required',retryable:false},503);
     if(path==='/internal/identity'){const state=this.load();return jsonResponse({pe_employees:state.pe_employees||[],pe_locked_users:state.pe_locked_users||[]});}
     if(path!=='/api/state'&&path!=='/internal/import-history'&&path!=='/api/admin/health'&&path!=='/api/backup')return jsonResponse({error:'Not found'},404);
@@ -183,6 +193,7 @@ export class ChalakState extends DurableObject<Env> implements TransactionStore 
     const context={request,env,data:{session}};
     if(path==='/internal/import-history')return importHistory(context);
     const response = request.method==='GET'?await onRequestGet(context):request.method==='POST'?await onRequestPost(context):jsonResponse({error:'Method not allowed'},405);
+    if(request.method==='POST'&&response.ok&&response.headers.get('X-Chalak-Rebased'))this.bump('rebased');
     if(request.method==='POST'){this.bump(response.ok?'commits':response.status===409?'conflicts':response.status>=500?'failures':'rejected');}
     if(request.method==='POST'&&response.ok)await this.ctx.storage.sync();
     return response;

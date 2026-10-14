@@ -6,4 +6,5 @@ export interface TransactionStore {
  read():{state:CloudState;meta:StateMeta};
  receipt(id:string):OperationReceipt|undefined;
  commit(current:CloudState,next:CloudState,expectedRevision:number,meta:StateMeta,receipt:OperationReceipt):StatePatch;
+ changesSince(base:number):{complete:boolean;entries:Array<{collection:string;identity:string}>};
 }

@@ -39,9 +39,9 @@ ok('tamper-and-forbidden-files-detected');
 
 // 3. bundles carry the exact release identity
 const rel = JSON.parse(fs.readFileSync(path.join(release, 'pages/release.json'), 'utf8'));
-assert.equal(rel.version, '8.0.0'); assert.equal(rel.storage, 'sqlite-durable-object'); assert.equal(rel.base, '7.0.0'); assert(rel.features.includes('operator-snapshot') && rel.features.includes('restore') && !rel.features.includes('scheduled-backup-r2'));
+assert.equal(rel.version, '8.1.0'); assert.equal(rel.storage, 'sqlite-durable-object'); assert.equal(rel.base, '7.0.0'); assert(rel.features.includes('operator-snapshot') && rel.features.includes('restore') && rel.features.includes('safe-rebase') && !rel.features.includes('scheduled-backup-r2'));
 const workerJs = fs.readFileSync(path.join(release, 'worker/index.js'), 'utf8');
-assert(/version:\s*"8\.0\.0"/.test(workerJs)); assert(workerJs.includes('ChalakState')); assert(workerJs.includes('runScheduledBackup') && workerJs.includes('scheduled(') && workerJs.includes('/api/admin/health') && workerJs.includes('/api/backup')); assert(workerJs.includes('blockConcurrencyWhile')); assert(workerJs.includes('transactionSync'));
+assert(/version:\s*"8\.1\.0"/.test(workerJs)); assert(workerJs.includes('ChalakState')); assert(workerJs.includes('runScheduledBackup') && workerJs.includes('scheduled(') && workerJs.includes('/api/admin/health') && workerJs.includes('/api/backup')); assert(workerJs.includes('blockConcurrencyWhile')); assert(workerJs.includes('transactionSync'));
 const pagesJs = fs.readFileSync(path.join(release, 'pages/_worker.js/index.js'), 'utf8');
 assert(pagesJs.includes('chalak-authoritative-state-v1')); assert(pagesJs.includes('admin/health') || pagesJs.includes('/api/admin/health')); assert(pagesJs.includes('api/backup') || pagesJs.includes('/api/backup'));
 ok('release-identity');
@@ -116,5 +116,5 @@ assert.equal(C.BASE.version, '7.0.0'); assert.equal(C.BASE.gitCommit, '15bddd2')
 assert(Object.keys(hashArtifacts(release)).length > 50);
 ok('base-identity');
 
-fs.writeFileSync('tests/evidence/v8-offline-acceptance.json', JSON.stringify({ version: '8.0.0', results }, null, 2));
+fs.writeFileSync('tests/evidence/v8-offline-acceptance.json', JSON.stringify({ version: '8.1.0', results }, null, 2));
 console.log('V8 OFFLINE ACCEPTANCE: ' + Object.keys(results).length + ' groups PASS');

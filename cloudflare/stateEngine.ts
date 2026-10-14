@@ -1,4 +1,5 @@
 import { stateOperationHash } from './operationReceipt';
+import type { TransactionStore } from './transactionStore';
 import { parseBusinessDate } from '../src/utils/businessDate';
 import { AuthSession, CloudflareEnv, jsonResponse } from './auth';
 import { CloudState, sanitizeCloudState } from './syncState';
@@ -40,6 +41,7 @@ interface StateEnvelope {
   employeePatch?: unknown;
   evaluationExpected?: unknown;
   evaluationDeleteIds?: unknown;
+  employeeExpected?: unknown;
 }
 
 class StateStoreUnavailable extends Error {
@@ -1106,6 +1108,63 @@ export async function onRequestPost(context: Context): Promise<Response> {
   } finally {activeStateWrites=Math.max(0,activeStateWrites-1);}
 }
 
+// ---- V8: safe server-side rebase of stale-revision patches --------------------------------------------------
+// A request prepared on an older revision is normally refused with 409. It may instead be applied on the current
+// state ONLY when every condition below holds; anything else keeps the strict v7 behaviour.
+//  1. It is a pure record patch of evaluations and/or employees, each changed record guarded by the SHA-256 of the
+//     version the client last saw (a different current version is refused by the digest checks).
+//  2. No deletes, no protected imports, no other state keys.
+//  3. The server's change log covers every revision since the client's base (no gap, nothing older than the last
+//     migration or restore).
+//  4. Meanwhile only evaluations, employees, audit, notifications and system logs changed; none of the records this
+//     request touches or depends on (the employee of an evaluation, the actor, the assignee) was among them.
+// pe_notifications is safe: the engine never replaces notifications from a client list, it only applies read-marks to the caller's own rows.
+const REBASE_KEYS = new Set(['pe_evaluations', 'pe_employees', 'pe_notifications']);
+const REBASE_INTERVENING = new Set(['pe_evaluations', 'pe_employees', 'pe_audit_logs', 'pe_notifications', 'pe_system_logs']);
+async function recordDigest(record: unknown): Promise<string | null> {
+  if (record === undefined) return null;
+  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(record))))).map(byte => byte.toString(16).padStart(2, '0')).join('');
+}
+function validExpectedMap(value: unknown, ids: Set<string>): value is Record<string, string | null> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const entries = Object.entries(value as Record<string, unknown>);
+  return entries.length === ids.size && entries.every(([id, digest]) => ids.has(id) && (digest === null || (typeof digest === 'string' && /^[a-f0-9]{64}$/i.test(digest))));
+}
+function rebaseDecision(input: { body: StateEnvelope; changes: CloudState; session: AuthSession; baseRevision: number; store: TransactionStore }): { ok: boolean; reason: string } {
+  const no = (reason: string) => ({ ok: false, reason });
+  const { body, changes, session, baseRevision, store } = input;
+  const keys = Object.keys(changes);
+  if (!keys.length || keys.some(key => !REBASE_KEYS.has(key))) return no('request_not_rebasable');
+  if (body.sourceImport !== undefined) return no('protected_import');
+  const evaluations = Array.isArray(changes.pe_evaluations) ? changes.pe_evaluations as Evaluation[] : [];
+  const employees = Array.isArray(changes.pe_employees) ? changes.pe_employees as Employee[] : [];
+  const evaluationIds = new Set(evaluations.map(record => record?.id));
+  const employeeIds = new Set(employees.map(record => record?.id));
+  if ('pe_evaluations' in changes) {
+    if (body.evaluationPatch !== true || !Array.isArray(changes.pe_evaluations) || evaluationIds.size !== evaluations.length || evaluations.some(record => !record?.id)) return no('evaluation_patch_required');
+    if (Array.isArray(body.evaluationDeleteIds) && body.evaluationDeleteIds.length) return no('delete_not_rebasable');
+    if (!validExpectedMap(body.evaluationExpected, evaluationIds as Set<string>)) return no('evaluation_digests_required');
+  }
+  if ('pe_employees' in changes) {
+    if (body.employeePatch !== true || !Array.isArray(changes.pe_employees) || employeeIds.size !== employees.length || employees.some(record => !record?.id)) return no('employee_patch_required');
+    if (!validExpectedMap(body.employeeExpected, employeeIds as Set<string>)) return no('employee_digests_required');
+  }
+  const log = store.changesSince(baseRevision);
+  if (!log.complete) return no('change_log_incomplete');
+  const related = new Set<string>([session.id]);
+  for (const record of evaluations) { if (record.empId) related.add(String(record.empId)); if (record.currentAssigneeId) related.add(String(record.currentAssigneeId)); }
+  for (const entry of log.entries) {
+    if (!REBASE_INTERVENING.has(entry.collection)) return no('intervening_' + entry.collection);
+    if (entry.identity === '*' && (entry.collection === 'pe_evaluations' || entry.collection === 'pe_employees')) return no('intervening_collection_replacement');
+    if (entry.collection === 'pe_evaluations' && evaluationIds.has(entry.identity)) return no('same_evaluation_changed');
+    if (entry.collection === 'pe_employees') {
+      if (employeeIds.has(entry.identity)) return no('same_employee_changed');
+      if (evaluations.length && related.has(entry.identity)) return no('related_employee_changed');
+    }
+  }
+  return { ok: true, reason: 'rebased' };
+}
+
 async function writeState({ request, env, data }: Context): Promise<Response> {
   if (!data.session) return jsonResponse({ error: 'Authentication required.', code: 'authentication_required', reason: 'authentication_required', retryable: false }, 401);
   if (!request.headers.get('Content-Type')?.toLowerCase().includes('application/json')) {
@@ -1165,13 +1224,29 @@ async function writeState({ request, env, data }: Context): Promise<Response> {
   }
   const baseRevision = Number(body.baseRevision);
   data.diagnostics.baseRevision = Number.isInteger(baseRevision) ? baseRevision : undefined;
+  let rebasedFrom: number | undefined;
   if (!Number.isInteger(baseRevision) || baseRevision !== currentMeta.revision) {
-    return jsonResponse({
-      error: 'داده ابری در مرورگر دیگری تغییر کرده است؛ آخرین نسخه دریافت و ذخیره دوباره انجام شود.',
-      code: 'revision_conflict', reason: 'stale_revision', retryable: false,
-      revision: currentMeta.revision,
-      updatedAt: currentMeta.updatedAt,
-    }, 409);
+    const decision = Number.isInteger(baseRevision) && baseRevision < currentMeta.revision && env.TRANSACTION_STORE
+      ? rebaseDecision({ body, changes, session: data.session, baseRevision, store: env.TRANSACTION_STORE })
+      : { ok: false, reason: 'not_a_stale_base' };
+    if (!decision.ok) {
+      return jsonResponse({
+        error: 'داده ابری در مرورگر دیگری تغییر کرده است؛ آخرین نسخه دریافت و ذخیره دوباره انجام شود.',
+        code: 'revision_conflict', reason: 'stale_revision', retryable: false, rebaseDeclined: decision.reason,
+        revision: currentMeta.revision,
+        updatedAt: currentMeta.updatedAt,
+      }, 409);
+    }
+    // The employee digests are compared with what is stored NOW (evaluations are guarded by the existing digest check below).
+    if (Array.isArray(changes.pe_employees)) {
+      const stored = new Map(getEmployees(current).map(employee => [employee.id, employee]));
+      for (const [id, expectedDigest] of Object.entries(body.employeeExpected as Record<string, string | null>)) {
+        if ((await recordDigest(stored.get(id))) !== expectedDigest?.toLowerCase() && !(expectedDigest === null && !stored.has(id))) {
+          return jsonResponse({ error: 'پرونده‌ی پرسنلی انتخاب‌شده روی سرور تغییر کرده است؛ نسخه تازه را بارگذاری و دوباره بررسی کنید.', code: 'employee_revision_conflict', reason: 'employee_changed_on_server', retryable: false, revision: currentMeta.revision }, 409);
+        }
+      }
+    }
+    rebasedFrom = baseRevision;
   }
   data.diagnostics.serverRevision = currentMeta.revision;
   if (body.employeePatch !== undefined && typeof body.employeePatch !== 'boolean') return jsonResponse({ error: 'Invalid personnel mutation mode.' }, 400);
@@ -1342,7 +1417,7 @@ async function writeState({ request, env, data }: Context): Promise<Response> {
       } else patch[key]=visible[key];
     }
     // Only changed rows are acknowledged; read-only historical audit stays on the server.
-    return jsonResponse({state:patch, statePatch:true, deletedStateIds:ack.deletedStateIds, replacementKeys:ack.replacementKeys, ...meta, accepted:true, operationId, payloadHash, acceptedRevision:meta.revision, storage:'sqlite-durable-object',protocolVersion:2,storageMetrics:ack.metrics});
+    return jsonResponse({state:patch, statePatch:true, deletedStateIds:ack.deletedStateIds, replacementKeys:ack.replacementKeys, ...meta, accepted:true, operationId, payloadHash, acceptedRevision:meta.revision, storage:'sqlite-durable-object',protocolVersion:2,storageMetrics:ack.metrics, ...(rebasedFrom !== undefined ? { rebased: true, rebasedFrom } : {})}, 200, rebasedFrom !== undefined ? { 'X-Chalak-Rebased': '1' } : {});
   } catch {
     throw new StateStoreUnavailable('transaction_commit_failed', String(operationId), 'kv_state_write', false, Date.now() - data.diagnostics.startedAt);
   }

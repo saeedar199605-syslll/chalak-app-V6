@@ -19,3 +19,11 @@ Login → Management Center → "backup/Excel/data" tab shows the "System health
 
 ## Not verified
 Real Cloudflare R2 (disabled in the shipped package; the account could not enable R2) (bucket creation, token permission, cron execution at 00:00 UTC), Restore on production data, behaviour at production scale, and the retention pruning of >30 objects (code path present, not exercised).
+## 8.1 — safe rebase (tests/v8-rebase.ts, shipped bundles) — all PASS
+- employee edit prepared on an old revision merged after an unrelated evaluation commit (rebased, revision +2, replay idempotent)
+- evaluation patch merged after an unrelated employee edit
+- refused (409 with reason): related employee changed, same evaluation changed, unsafe key, unsafe intervening collection, wrong or missing digest, base before the last migration/restore, future base
+- two Pages processes, same base revision, different entities: both 200, exactly one rebased; same entity: one 200 and one 409
+- stale notification-marks request merged
+- Real browser: the app's own save button, with the sync engine on revision 42 while the server was on 43, sent employeePatch+employeeExpected, got 200 ebased:true (revision 44); the unit value and the other writer's evaluation score both persisted and the local cache matched.
+- Known limit: a request that also carries admin pe_system_logs (for example the first save after login) is not rebased.

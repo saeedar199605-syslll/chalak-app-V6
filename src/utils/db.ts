@@ -1833,6 +1833,7 @@ export class AppDatabase {
         }
       }
       let employeePatch = false;
+      let employeeExpected: Record<string, string | null> | undefined;
       if (Array.isArray(changes.pe_employees)) {
         const raw = this.lastSyncedValues.get(STORAGE_KEYS.EMPLOYEES);
         const baseline: Employee[] = raw ? JSON.parse(raw) : [];
@@ -1847,7 +1848,10 @@ export class AppDatabase {
           const updated = next.filter(e => personnelValue(old.get(e.id)) !== personnelValue(e));
           changes.pe_employees = updated.map(({personnelRevision, personnelUpdatedAt, ...record}) => record);
           employeePatch = true;
-          if (!updated.length) { delete changes.pe_employees; sentRaw.delete(STORAGE_KEYS.EMPLOYEES); this.dirtyKeys.delete(STORAGE_KEYS.EMPLOYEES); employeePatch = false; }
+          // Digest of the exact record version this client last saw: lets the server merge a stale-revision edit safely.
+          employeeExpected = {};
+          for (const e of updated) employeeExpected[e.id] = old.has(e.id) ? await this.recordFingerprint(old.get(e.id)) : null;
+          if (!updated.length) { delete changes.pe_employees; sentRaw.delete(STORAGE_KEYS.EMPLOYEES); this.dirtyKeys.delete(STORAGE_KEYS.EMPLOYEES); employeePatch = false; employeeExpected = undefined; }
         }
       }
       keysToSend = Object.keys(changes);
@@ -1870,7 +1874,7 @@ export class AppDatabase {
       }
       if (this.terminalRejectedSnapshot && this.terminalRejectedSnapshot.fingerprint !== fingerprint) this.terminalRejectedSnapshot = null;
 
-      const requestFingerprint = await this.recordFingerprint({ changes, sourceImport: sourceImportContext, employeePatch, evaluationPatch, evaluationExpected, evaluationDeleteIds });
+      const requestFingerprint = await this.recordFingerprint({ changes, sourceImport: sourceImportContext, employeePatch, employeeExpected, evaluationPatch, evaluationExpected, evaluationDeleteIds });
       const operationId = bulkOperation?.id || await this.getOrCreateSyncOperationId(requestFingerprint);
       this.pendingOperationIds.add(operationId);
       this.emitCloudStatus('syncing', 'در حال ذخیره…', { operationId });
@@ -1882,7 +1886,7 @@ export class AppDatabase {
           baseRevision: this.cloudRevision,
           clientId: this.getClientId(),
           operationId,
-          ...(employeePatch ? { employeePatch: true } : {}),
+          ...(employeePatch ? { employeePatch: true, employeeExpected } : {}),
           ...(evaluationPatch ? { evaluationPatch: true, evaluationExpected, evaluationDeleteIds } : {}),
           ...(sourceImportContext ? { sourceImport: sourceImportContext } : {}),
         }), controller.signal, this.retryAttempt);
@@ -1895,7 +1899,7 @@ export class AppDatabase {
         return false;
       }
       const result = contentType.includes('application/json')
-        ? await res.json() as { state?: CloudState; statePatch?:boolean; storage?:string; protocolVersion?:number; revision?: number; updatedAt?: string; error?: string; code?: string; reason?: string; retryable?: boolean }
+        ? await res.json() as { state?: CloudState; statePatch?:boolean; storage?:string; protocolVersion?:number; revision?: number; updatedAt?: string; error?: string; code?: string; reason?: string; retryable?: boolean; rebased?: boolean }
         : {};
       if (res.ok && result.state) result.state = materializeStatePatch(result as any, key => { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : undefined; });
       if (!isCurrentSyncGeneration(requestGeneration, this.syncGeneration)) return false;
@@ -1950,9 +1954,11 @@ export class AppDatabase {
       const acceptedKeys = [...new Set([...sentRaw.keys(), ...reconciledKeys])];
       this.publishAcceptedDomainChanges(acceptedKeys, 'accepted_write', operationId, this.cloudRevision);
       this.announceAcceptedCrossTabChange(acceptedKeys, operationId);
-      this.emitCloudStatus('synced', 'ذخیره شد؛ همه تغییرات در پایگاه داده ابری ثبت شدند.', {
+      this.emitCloudStatus('synced', result.rebased ? 'ذخیره شد؛ تغییر شما بدون تداخل با تغییرات هم‌زمان دیگران ثبت شد و نسخه تازه دریافت می‌شود.' : 'ذخیره شد؛ همه تغییرات در پایگاه داده ابری ثبت شدند.', {
         lastSyncedAt: result.updatedAt || new Date().toISOString(), operationId
       });
+      // A rebased write was accepted on a newer server state than this client holds: pull the rest right away.
+      if (result.rebased) setTimeout(() => { if (this.cloudSyncEnabled) this.runSyncCycle('pull').catch(() => {}); }, 300);
       this.clearCloudRetry();
       if (this.dirtyKeys.size === 0 && this.activeSyncUserId) {
         localStorage.removeItem(this.pendingSyncBackupKey(this.activeSyncUserId));
