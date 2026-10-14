@@ -1,0 +1,23 @@
+{
+  "stalePersonnel": {
+    "updates": 0,
+    "status": "NEEDS_REVIEW"
+  },
+  "finalizedScore": {
+    "snapshot": 60,
+    "withChangedLiveProfile": 60
+  },
+  "wrongPeriodViolation": {
+    "rejected": true,
+    "deduction": 0
+  },
+  "reorderedStoredMapping": "0012",
+  "unrelatedFirstSheet": {
+    "parsed": true,
+    "code": "0012"
+  },
+  "incompatibleReceipt": {
+    "http": 503,
+    "accepted": false
+  }
+}

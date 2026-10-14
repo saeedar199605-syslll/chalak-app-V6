@@ -1,0 +1,65 @@
+[
+  {
+    "mode": "before_disconnect",
+    "status": "THROWN",
+    "posts": 1,
+    "receiptLookups": 1,
+    "persisted": false,
+    "preparedPreserved": true,
+    "requestBytes": 506
+  },
+  {
+    "mode": "after_disconnect",
+    "status": 200,
+    "posts": 1,
+    "receiptLookups": 1,
+    "persisted": true,
+    "preparedPreserved": true,
+    "requestBytes": 505
+  },
+  {
+    "mode": "timeout",
+    "status": "THROWN",
+    "posts": 1,
+    "receiptLookups": 1,
+    "persisted": false,
+    "preparedPreserved": true,
+    "requestBytes": 497
+  },
+  {
+    "mode": "503",
+    "status": 503,
+    "posts": 1,
+    "receiptLookups": 1,
+    "persisted": false,
+    "preparedPreserved": true,
+    "requestBytes": 493
+  },
+  {
+    "mode": "conflict",
+    "status": 409,
+    "posts": 1,
+    "receiptLookups": 0,
+    "persisted": false,
+    "preparedPreserved": true,
+    "requestBytes": 498
+  },
+  {
+    "mode": "bad_receipt",
+    "status": 503,
+    "posts": 1,
+    "receiptLookups": 0,
+    "persisted": false,
+    "preparedPreserved": true,
+    "requestBytes": 501
+  },
+  {
+    "mode": "receipt_other_payload",
+    "status": 503,
+    "posts": 1,
+    "receiptLookups": 1,
+    "persisted": false,
+    "preparedPreserved": true,
+    "requestBytes": 511
+  }
+]

@@ -1,0 +1,19 @@
+{
+  "typecheck": {
+    "runs": 1,
+    "exitCode": 0
+  },
+  "build": {
+    "runs": 1,
+    "exitCode": 0,
+    "seconds": 25.18,
+    "entry": "dist/assets/index-BmJIbxXi.js",
+    "warnings": [
+      "Existing vendor PURE annotations removed",
+      "Chunks exceed 500 kB"
+    ]
+  },
+  "unsafeFormulaRejected": true,
+  "productionCpuMemoryEvidence": "Unavailable",
+  "productionDeployed": false
+}

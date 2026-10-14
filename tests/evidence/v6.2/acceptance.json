@@ -1,0 +1,104 @@
+{
+  "writers": [
+    "separate Pages process :8801",
+    "separate Pages process :8802"
+  ],
+  "storage": "actual local SQLite-backed Durable Object; not a persistence mock",
+  "tests": {
+    "E_migration": {
+      "dryRun": 200,
+      "invalidBackup": 400,
+      "migrate": 200,
+      "idempotentMigration": 200,
+      "oldRevision": 17,
+      "newRevision": 17,
+      "countsPreserved": true,
+      "scoresPreserved": true,
+      "finalizedPreserved": true,
+      "reversedViolationPreserved": true,
+      "staleKvIgnored": true
+    },
+    "A": {
+      "http": [
+        200,
+        409
+      ],
+      "acceptedRevisions": [
+        18,
+        null
+      ],
+      "freshRevision": 18,
+      "noLostUpdate": true
+    },
+    "B": {
+      "http": [
+        409,
+        200
+      ],
+      "explicitFreshReadRetry": 200,
+      "bothChangesPersisted": true
+    },
+    "C": {
+      "http": [
+        200,
+        409
+      ],
+      "explicitFreshReadRetry": 200,
+      "personnelAndScorePersisted": true,
+      "finalizedUnchanged": true,
+      "scoreMetrics": {
+        "serializedRecords": 2,
+        "auditRecords": 1,
+        "evaluationRecords": 1,
+        "sqlWrites": 4
+      }
+    },
+    "D": {
+      "commit": 200,
+      "responseDeliberatelyDropped": true,
+      "receipt": 200,
+      "replay": 200,
+      "revisionAdvancedExactlyOnce": true,
+      "auditUnchangedOnReplay": true,
+      "payloadMismatch": 409,
+      "lowRoleDenied": 403
+    },
+    "E_export": {
+      "http": 200,
+      "checksumVerified": true,
+      "countsPreserved": true,
+      "violationHistoryPreserved": true,
+      "finalizedPreserved": true,
+      "allAuditPreserved": true,
+      "frozenWriteRejected": 503,
+      "rollbackArtifactReady": true,
+      "rollbackStoredInActualLocalKV": true,
+      "exactRollbackSnapshotVerified": true,
+      "rollbackRevision": 23
+    },
+    "performance": {
+      "employee": {
+        "requestBytes": 465,
+        "responseBytes": 806,
+        "elapsedMs": 124,
+        "metrics": {
+          "serializedRecords": 2,
+          "auditRecords": 1,
+          "evaluationRecords": 0,
+          "sqlWrites": 4
+        }
+      },
+      "score": {
+        "requestBytes": 635,
+        "responseBytes": 999,
+        "elapsedMs": 127,
+        "metrics": {
+          "serializedRecords": 2,
+          "auditRecords": 1,
+          "evaluationRecords": 1,
+          "sqlWrites": 4
+        }
+      }
+    }
+  }
+}

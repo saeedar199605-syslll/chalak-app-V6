@@ -1,3 +1,4 @@
+import { readIdentityState } from '../../../cloudflare/authority';
 import {
   AuthSession,
   CloudflareEnv,
@@ -18,11 +19,10 @@ type EmployeeRecord = { id: string; username?: string; code?: string };
 
 async function readEmployees(env: CloudflareEnv): Promise<EmployeeRecord[]> {
   try {
-    const raw = await env.CHALAK_DB.get('app_state');
-    const state = raw ? JSON.parse(raw) as Record<string, unknown> : {};
+    const state = await readIdentityState(env);
     return Array.isArray(state.pe_employees) ? state.pe_employees as EmployeeRecord[] : [];
   } catch {
-    return [];
+    throw new Error('Authoritative identity store unavailable');
   }
 }
 

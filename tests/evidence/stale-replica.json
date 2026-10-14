@@ -1,0 +1,15 @@
+{
+  "mode": "Deterministic stale-replica read injection; FINAL v6.1 handler; actual isolated Pages/KV writes",
+  "http": [
+    200,
+    200
+  ],
+  "acceptedRevisions": [
+    31,
+    31
+  ],
+  "baseRevision": 30,
+  "writerAPersisted": false,
+  "writerBPersisted": true,
+  "sameAcceptedRevision": true
+}

@@ -1,14 +1,15 @@
+import { forwardAuthority } from '../../../cloudflare/authority';
 import { AuthSession, CloudflareEnv, jsonResponse } from '../../../cloudflare/auth';
 
-interface Context { env: CloudflareEnv; data: { session?: AuthSession } }
+interface Context { request:Request; env: CloudflareEnv; data: { session?: AuthSession } }
 
-export async function onRequestGet({ env, data }: Context): Promise<Response> {
+export async function onRequestGet({ request, env, data }: Context): Promise<Response> {
   const session = data.session;
   if (!session) return jsonResponse({ error: 'Authentication required.' }, 401);
+  if (!env.TRANSACTION_STORE) return forwardAuthority(new Request('https://authority/internal/import-history',{headers:request.headers}),env);
   let state: Record<string, unknown>;
   try {
-    const raw = await env.CHALAK_DB.get('app_state');
-    state = raw ? JSON.parse(raw) as Record<string, unknown> : {};
+    state = env.TRANSACTION_STORE.read().state;
   } catch {
     return jsonResponse({ error: 'تاریخچه ورود اطلاعات موقتاً در دسترس نیست.', code: 'import_history_unavailable' }, 503);
   }

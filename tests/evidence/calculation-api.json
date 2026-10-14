@@ -1,0 +1,42 @@
+{
+  "profileChangeHttp": 200,
+  "finalSnapshotScore": 60,
+  "finalRecordUnchanged": true,
+  "outOfRangeHttp": 403,
+  "identityMoveHttp": 403,
+  "finalMutationHttp": 403,
+  "manualScoresPreserved": true,
+  "lowRoleScopedRead": true,
+  "measurements": [
+    {
+      "status": 200,
+      "requestBytes": 277,
+      "responseBytes": 20707,
+      "elapsedMs": 147
+    },
+    {
+      "status": 403,
+      "requestBytes": 615,
+      "responseBytes": 197,
+      "elapsedMs": 33
+    },
+    {
+      "status": 403,
+      "requestBytes": 614,
+      "responseBytes": 185,
+      "elapsedMs": 33
+    },
+    {
+      "status": 403,
+      "requestBytes": 608,
+      "responseBytes": 196,
+      "elapsedMs": 32
+    },
+    {
+      "status": 200,
+      "requestBytes": 277,
+      "responseBytes": 23131,
+      "elapsedMs": 90
+    }
+  ]
+}

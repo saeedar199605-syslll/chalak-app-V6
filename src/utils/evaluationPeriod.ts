@@ -1,6 +1,20 @@
 import type { Evaluation } from '../types';
 import { normalizeDigits } from './personnelSearch';
 import { getJalaliDateParts } from './iranDate';
+import { parseBusinessDate } from './businessDate';
+
+/** Reject unidentifiable periods rather than charge an incident to an arbitrary evaluation. */
+export function businessDateBelongsToPeriod(date: string, periodId: string): boolean {
+  let label: string;
+  try { label = normalizeDigits(periodId.startsWith('period:') ? decodeURIComponent(periodId.slice(7)) : periodId).replace(/\u200c/g,' ').trim().toLowerCase(); } catch { return false; }
+  const parsed = parseBusinessDate(date), year = label.match(/(?:^|\D)(1[34]\d{2})(?=\D|$)/);
+  if (!parsed || !year) return false;
+  const months = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
+  const monthly = new RegExp('(?:^|[\\s\\d_-])(?:'+months.join('|')+')(?:$|[\\s\\d_-])').test(label);
+  const span = monthly ? 1 : /بهار|تابستان|پاییز|پائيز|زمستان|سه\s*ماهه|\bq[1-4]\b|spring|summer|autumn|fall|winter|quarter/.test(label) ? 3 : /نیمه|نيمه|\bh[12]\b|half/.test(label) ? 6 : /سالانه|سال|annual|year/.test(label) || /^1[34]\d{2}$/.test(label) ? 12 : 0;
+  const start = getEvaluationPeriodStartOrdinal(label), parts = getJalaliDateParts(parsed), ordinal = parts.year * 12 + parts.month;
+  return span > 0 && start !== null && ordinal >= start && ordinal < start + span;
+}
 
 /** Stable key for legacy periods while the persisted evaluation stores the key explicitly. */
 export function canonicalEvaluationPeriodId(label: string): string {

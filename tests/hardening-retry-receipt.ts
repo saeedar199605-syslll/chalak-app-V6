@@ -1,0 +1,4 @@
+import fs from 'node:fs';import assert from 'node:assert/strict';import {db} from '../src/utils/db';import {person} from './hardening-fixture';
+const before=process.argv.includes('--before'),original=globalThis.fetch;let posts=0;
+globalThis.fetch=async(_url:any,init:any)=>{if(init?.method==='POST')posts++;return new Response(JSON.stringify({accepted:true,operationId:'wrong-op',acceptedRevision:9,revision:9,state:{}}),{status:200,headers:{'Content-Type':'application/json'}});};
+try{const response=await(db as any).postManagedState(JSON.stringify({state:{pe_employees:[person]},operationId:'qa-retry-receipt',employeePatch:true}),new AbortController().signal,1);const result={posts,http:response.status};fs.writeFileSync(before?'.retry-receipt-before-private.json':'.retry-receipt-after-private.json',JSON.stringify(result));console.log(JSON.stringify(result));if(!before){assert.equal(posts,0);assert.equal(response.status,503);}}finally{globalThis.fetch=original;}

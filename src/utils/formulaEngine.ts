@@ -416,7 +416,7 @@ export function calculateBasePerformanceScore(ev: Evaluation, profiles?: JobProf
   // If profiles are provided and the evaluation is not locked/calibrated, use the live weights from the profile.
   // Otherwise, use the snapshot weights saved inside the evaluation.
   let profile = profiles ? profiles.find(p => p.id === ev.profileId) : undefined;
-  let useLiveWeights = profile && (ev.status === 'draft');
+  let useLiveWeights = profile && ev.status === 'draft' && ev.stage !== 'completed';
 
   let totalWeight = 0;
   let weightedSum = 0;

@@ -1,0 +1,15 @@
+{
+  "operationalKvReads": 0,
+  "operationalKvWrites": 0,
+  "authoritativeRoute": "/api/state -> CHALAK_STATE fixed named DO -> stateEngine -> transactionSync",
+  "relatedReaders": [
+    "auth identity/session/password registry",
+    "import history",
+    "email import receipt"
+  ],
+  "auxiliaryKvDomains": [
+    "credentials/sessions/rate",
+    "email intake/quarantine metadata",
+    "separate credential/email trace events"
+  ]
+}

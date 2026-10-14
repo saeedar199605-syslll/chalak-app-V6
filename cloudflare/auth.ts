@@ -1,3 +1,5 @@
+import { readIdentityState } from './authority';
+import type { TransactionStore } from './transactionStore';
 export interface KvNamespace {
   get(key: string): Promise<string | null>;
   put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
@@ -6,6 +8,9 @@ export interface KvNamespace {
 
 export interface CloudflareEnv {
   CHALAK_DB: KvNamespace;
+  CHALAK_STATE?: { idFromName(name:string):unknown; get(id:unknown): {fetch(request:Request):Promise<Response>} };
+  TRANSACTION_STORE?: TransactionStore;
+  STORAGE_MAINTENANCE_TOKEN?: string;
   GEMINI_API_KEY?: string;
   ADMIN_PASSWORD?: string;
   EMAIL_INGEST_WEBHOOK_SECRET?: string;
@@ -86,15 +91,13 @@ export async function readSession(request: Request, env: CloudflareEnv): Promise
     await env.CHALAK_DB.delete(`session:${token}`);
     return null;
   }
-  if (session.username !== 'admin') {
-    const rawState = await env.CHALAK_DB.get('app_state');
-    let state: Record<string, unknown>;
-    try { state = rawState ? JSON.parse(rawState) as Record<string, unknown> : {}; }
-    catch { return null; }
+  {
+    const state = await readIdentityState(env);
     const employees = Array.isArray(state.pe_employees) ? state.pe_employees as Array<Record<string, unknown>> : [];
     const employee = employees.find(item => String(item.id) === session.id && normalizeUsername(item.username) === session.username);
     const lockedUsers = Array.isArray(state.pe_locked_users) ? state.pe_locked_users.map(String) : [];
-    if (!employee || employee.role !== session.role || lockedUsers.includes(session.id) || lockedUsers.includes(session.username)) {
+    const bootstrap = employees.length === 0 && session.id === 'emp-admin' && session.username === 'admin' && session.role === 'admin';
+    if (!bootstrap && (!employee || employee.role !== session.role || employee.employmentStatus === 'inactive' || employee.employmentStatus === 'unknown' || lockedUsers.includes(session.id) || lockedUsers.includes(session.username))) {
       await env.CHALAK_DB.delete(`session:${token}`);
       return null;
     }

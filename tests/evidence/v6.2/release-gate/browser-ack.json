@@ -1,0 +1,41 @@
+{
+  "pendingUiNoFalseSuccess": true,
+  "saveHttp": 200,
+  "operationId": "0ec51fca-2de1-4817-ab87-223becd8e493",
+  "baseRevision": 19,
+  "acceptedRevision": 20,
+  "payloadHashMatches": true,
+  "receiptHttp": 200,
+  "receiptMatches": true,
+  "freshReadHttp": 200,
+  "exactNamePersisted": true,
+  "unrelatedEmployeeCountPreserved": true,
+  "dialogClosedOnlyAfterAcceptance": true,
+  "serverOriginalValueWhilePending": "QA62-GATE-SAVED",
+  "delayMs": 4613,
+  "browserAfterReloadVerified": true,
+  "conflict": {
+    "http": 409,
+    "operationId": "7b95c767-f251-46da-8413-7fdb4e0497ee",
+    "baseRevision": 20,
+    "serverRevision": 21,
+    "competingWriteHttp": 200,
+    "receiptHttp": 200,
+    "rejectedOperationNotCommitted": true,
+    "dialogPreserved": true,
+    "exactEnteredName": "QA62-GATE-UNSAVED",
+    "enteredValuePreserved": true,
+    "noFalseSuccess": true,
+    "noUnwantedServerNameChange": true,
+    "numberOfPostsForRejectedOperation": 1
+  },
+  "integrity": {
+    "employeeCount": 3,
+    "evaluationCount": 2,
+    "scoreSlots": 4,
+    "scoresAndFinalizedUnchanged": true,
+    "violationsAndReversalsUnchanged": true,
+    "criteriaAndProfilesUnchanged": true,
+    "previousAuditPreserved": true
+  }
+}

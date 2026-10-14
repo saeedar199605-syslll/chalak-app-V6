@@ -1,0 +1,42 @@
+{
+  "typecheck": "PASS",
+  "typecheckInvocations": 1,
+  "build": "PASS",
+  "buildInvocations": 1,
+  "buildSeconds": 29.84,
+  "runtimeSourceFilesChecked": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+  ],
+  "runtimeSourceChanged": false,
+  "acceptedArchiveUnchanged": true,
+  "acceptedArchiveSHA256": "8E3AA6733BB97D7783A52B1B4F268E6F31844131F80969CA8499FE5CA3FA795A",
+  "productionDeployed": false,
+  "readyForControlledDeployment": false,
+  "finalStatus": "BLOCKED",
+  "unresolvedBlockers": [
+    "Live binding and secret-name inventory cannot be verified: Cloudflare account unauthenticated",
+    "Full legacy Production write-freeze coverage remains unverified"
+  ]
+}

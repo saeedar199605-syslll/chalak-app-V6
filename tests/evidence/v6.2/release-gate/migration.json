@@ -1,0 +1,38 @@
+{
+  "dryRun": 200,
+  "noWriteDuringPreview": true,
+  "migrate": 200,
+  "repeatedMigration": 200,
+  "noDuplicates": true,
+  "countsBefore": {
+    "pe_employees": 3,
+    "pe_profiles": 1,
+    "pe_criteria": 2,
+    "pe_evaluations": 2,
+    "pe_archived_evaluations": 0,
+    "pe_audit_logs": 5,
+    "pe_violations": 1,
+    "__operation_receipts": 1
+  },
+  "countsAfter": {
+    "pe_employees": 3,
+    "pe_profiles": 1,
+    "pe_criteria": 2,
+    "pe_evaluations": 2,
+    "pe_archived_evaluations": 0,
+    "pe_audit_logs": 5,
+    "pe_violations": 1,
+    "__operation_receipts": 1
+  },
+  "scoreSlotsBefore": 4,
+  "scoreSlotsAfter": 4,
+  "exactScoresPreserved": true,
+  "exactViolationsAndReversalsPreserved": true,
+  "exactAuditPreserved": true,
+  "sha256Before": "5606902be355f1bc313c9fdfbabc99f61d3a79424c5b49ceac57857ffd2fa47c",
+  "sha256After": "5606902be355f1bc313c9fdfbabc99f61d3a79424c5b49ceac57857ffd2fa47c",
+  "revisionBefore": 17,
+  "revisionAfter": 17,
+  "storage": "actual isolated SQLite Durable Object",
+  "productionChanged": false
+}

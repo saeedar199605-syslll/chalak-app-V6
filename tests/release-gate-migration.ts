@@ -1,0 +1,10 @@
+import fs from 'node:fs';import assert from 'node:assert/strict';import {verifySnapshot,snapshotCounts} from '../cloudflare/stateBackup';
+const url='http://127.0.0.1:8811';const backup=JSON.parse(fs.readFileSync('.qa62-backup-private.json','utf8'));const operator=fs.readFileSync('storage-worker/.dev.vars','utf8').match(/STORAGE_MAINTENANCE_TOKEN="([^"\r\n]+)"/)![1];
+async function control(action:string,extra:any={}){const r=await fetch(url+'/api/storage',{method:'POST',headers:{Authorization:'Bearer '+operator,'Content-Type':'application/json'},body:JSON.stringify({action,...extra})});const body=await r.json() as any;assert.equal(r.status,200,JSON.stringify(body));return body;}
+assert.equal((await control('status')).initialized,false);await verifySnapshot(backup);
+const dry=await control('dry-run',{backup});assert.equal((await control('status')).initialized,false);
+const migrated=await control('migrate',{backup});const replay=await control('migrate',{backup});assert.equal(replay.replayed,true);
+const exported=await control('export',{expectedRevision:backup.meta.revision});await verifySnapshot(exported);assert.equal(exported.sha256,backup.sha256);assert.deepEqual(exported.state,backup.state);assert.deepEqual(exported.meta,backup.meta);
+const scores=(state:any)=>[...(state.pe_evaluations||[]),...(state.pe_archived_evaluations||[])].reduce((n,e)=>n+(e.scores||[]).length,0);
+const report={dryRun:200,noWriteDuringPreview:true,migrate:200,repeatedMigration:200,noDuplicates:true,countsBefore:snapshotCounts(backup.state),countsAfter:snapshotCounts(exported.state),scoreSlotsBefore:scores(backup.state),scoreSlotsAfter:scores(exported.state),exactScoresPreserved:true,exactViolationsAndReversalsPreserved:true,exactAuditPreserved:true,sha256Before:backup.sha256,sha256After:exported.sha256,revisionBefore:backup.meta.revision,revisionAfter:exported.meta.revision,storage:'actual isolated SQLite Durable Object',productionChanged:false};
+fs.writeFileSync('.gate-migration-private.json',JSON.stringify(report,null,2));await control('activate',{expectedRevision:backup.meta.revision});console.log(JSON.stringify(report));

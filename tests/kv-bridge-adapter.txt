@@ -1,0 +1,11 @@
+// LOCAL FAILURE-INJECTION ADAPTER ONLY. Explicitly excluded from BOTH release ZIPs.
+// This route keeps persistence real while the test injects stale replica reads around the unmodified state handler.
+import { jsonResponse, type CloudflareEnv, type AuthSession } from '../../cloudflare/auth';
+let queue:Promise<unknown>=Promise.resolve();
+export async function onRequest({request,env,data}:{request:Request;env:CloudflareEnv & {CF_PAGES_BRANCH?:string};data:{session?:AuthSession}}){
+  if (env.CF_PAGES_BRANCH!=='local' || !['localhost','127.0.0.1'].includes(new URL(request.url).hostname)) return jsonResponse({error:'Not found'},404);
+  if(data.session?.role!=='admin')return jsonResponse({error:'Forbidden'},403);
+  if(request.method==='GET'){const key=new URL(request.url).searchParams.get('key');if(!['app_state','app_state_meta'].includes(key||''))return jsonResponse({error:'Invalid key'},400);return jsonResponse({value:await env.CHALAK_DB.get(key!)});}
+  if(request.method==='POST'){const {key,value}=await request.json() as {key:string;value:string};if(!['app_state','app_state_meta'].includes(key)||typeof value!=='string')return jsonResponse({error:'Invalid key'},400);const task=queue.then(()=>env.CHALAK_DB.put(key,value));queue=task.catch(()=>{});await task;return jsonResponse({ok:true});}
+  return jsonResponse({error:'Method'},405);
+}

@@ -1,0 +1,9 @@
+{
+  "http": 200,
+  "managedPosts": 1,
+  "authoritativeReceiptLookups": 1,
+  "realPersisted": true,
+  "replayHttp": 200,
+  "revisionAdvance": 1,
+  "oldBackendAckRejected": true
+}

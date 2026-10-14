@@ -15,6 +15,33 @@ export const PERSONNEL_ALIASES: Record<string, string[]> = {
   employmentStart: ['تاریخ شروع همکاری'], employmentEnd: ['تاریخ ترک کار'],
 };
 export type PersonnelMapping = Record<string, number[]>;
+export interface SavedPersonnelMapping { headers: string[]; mapping: PersonnelMapping }
+/** Stored column positions are meaningful only with their original header identities. */
+export function restorePersonnelMapping(rows: unknown[][], saved: unknown): PersonnelMapping | undefined {
+  const value = saved as SavedPersonnelMapping | null;
+  if (!value || !Array.isArray(value.headers) || !value.mapping || typeof value.mapping !== 'object') return undefined;
+  let headers: string[];
+  try { headers = identifyPersonnelHeaders(rows).headers; } catch { headers = (rows[0] || []).map(v => String(v ?? '').trim()); }
+  const result: PersonnelMapping = {};
+  for (const [field,indexes] of Object.entries(value.mapping)) {
+    if (!Object.hasOwn(PERSONNEL_ALIASES,field) || !Array.isArray(indexes)) return undefined;
+    const positions = new Set<number>();
+    for (const index of indexes) {
+      if (!Number.isInteger(index) || typeof value.headers[index] !== 'string' || !value.headers[index].trim()) return undefined;
+      const matches = headers.flatMap((h,i) => normalizeSearchText(h) === normalizeSearchText(value.headers[index]) ? [i] : []);
+      if (!matches.length) return undefined;
+      matches.forEach(i => positions.add(i));
+    }
+    result[field] = [...positions];
+  }
+  return result;
+}
+export function personnelWorkbookSheets(workbook: ParsedWorkbook): string[] {
+  if (['پرسنل چالاک','پرسنل چالاک 2'].every(n => workbook.rowsBySheet[n])) return ['پرسنل چالاک','پرسنل چالاک 2'];
+  const matching = workbook.sheets.filter(n => { try { identifyPersonnelHeaders(workbook.rowsBySheet[n]); return true; } catch { return false; } });
+  if (matching.length > 1) throw new Error('چند شیت پرسنلی مستقل یافت شد؛ شیت موردنظر را در یک فایل مستقل انتخاب کنید.');
+  return matching.length ? matching : workbook.sheets.slice(0,1);
+}
 export interface PersonnelInput { row: number; sheet: string; data: Record<string, string>; issues: string[] }
 export function identifyPersonnelHeaders(rows: unknown[][], overrides?: PersonnelMapping) {
   const normalize = normalizeSearchText;
@@ -47,7 +74,7 @@ export function parsePersonnelSheet(rows: unknown[][], sheet: string, overrides?
   });
 }
 export function parsePersonnelWorkbook(workbook: ParsedWorkbook, mappings: Record<string,PersonnelMapping> = {}) {
-  const names = ['پرسنل چالاک','پرسنل چالاک 2'].every(n => workbook.rowsBySheet[n]) ? ['پرسنل چالاک','پرسنل چالاک 2'] : workbook.sheets.slice(0,1);
+  const names = personnelWorkbookSheets(workbook);
   const inputs = names.flatMap(n => parsePersonnelSheet(workbook.rowsBySheet[n], n, mappings[n]));
   const codes = (n: string) => new Set(inputs.filter(r => r.sheet === n).map(r => r.data.code).filter(Boolean));
   const main = codes(names[0]), secondary = names[1] ? codes(names[1]) : new Set<string>();
@@ -71,6 +98,7 @@ export function preparePersonnelImport(inputs: PersonnelInput[], employees: Empl
       else if (signatures.size > 1 || owners.length > 1) { status='CONFLICT'; issues.push('کد مشترک با اطلاعات متفاوت؛ نیازمند بررسی انسانی.'); }
       else if (i > 0) status='DUPLICATE_IN_FILE';
       else if (issues.length) status='CONFLICT';
+      else if (old?.personnelEffectiveDate && parseBusinessDate(old.personnelEffectiveDate) && parseBusinessDate(options.effectiveDate || '') && parseBusinessDate(options.effectiveDate!)! < parseBusinessDate(old.personnelEffectiveDate)!) { status='NEEDS_REVIEW'; issues.push('تاریخ مؤثر منبع قدیمی‌تر از اطلاعات پذیرفته‌شده است؛ اطلاعات فعلی حفظ شد.'); }
       else {
         const candidate: Employee = old ? {...old} : {id:crypto.randomUUID(),code,name:data.name,unit:data.unit||'',username:`user_${code.toLowerCase().replace(/[^a-z0-9]/g,'_')}`,role:'employee',profileId:options.newProfileId||'',employmentStatus:'unknown'};
         for (const field of ['name','unit','approvedJobTitle','internalJobDescription','shift','employmentStart','employmentEnd'] as const) {

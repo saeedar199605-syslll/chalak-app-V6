@@ -1,17 +1,25 @@
 {
   "name": "chalak-performance",
   "private": true,
-  "version": "6.0.0",
+  "version": "7.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p storage-worker/tsconfig.json",
     "lint": "npm run typecheck",
+    "check": "npm run typecheck && npm run test && npm run build",
     "preview": "vite preview",
     "cf:dev": "npm run build && wrangler pages dev dist",
     "cf:functions": "wrangler pages functions build --outdir .wrangler/functions-build",
-    "deploy": "npm run typecheck && npm run build && wrangler pages deploy dist"
+    "deploy": "npm run typecheck && npm run build && wrangler pages deploy dist",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "storage:tool": "node tools/build-state-transfer.cjs",
+    "storage:dev": "wrangler dev --config storage-worker/wrangler.jsonc",
+    "release:prepare": "node scripts/release.mjs prepare",
+    "release:verify": "node scripts/release.mjs verify",
+    "test:v7": "node tests/run-v7.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.18.0",
@@ -30,11 +38,13 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260914.1",
+    "@playwright/test": "1.63.0",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "tailwindcss": "^4.1.14",
     "typescript": "~5.8.2",
-    "wrangler": "^4.148.0"
+    "vitest": "5.0.2",
+    "wrangler": "4.131.2"
   },
   "overrides": {
     "uuid": "^11.1.0",

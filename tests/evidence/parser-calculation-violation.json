@@ -1,0 +1,38 @@
+{
+  "dataIntegrity": {
+    "duplicatesOnce": true,
+    "reimportNoWrites": true,
+    "allConflictsQuarantined": true,
+    "blankPreserves": true,
+    "inactiveNotReactivated": true
+  },
+  "calculationIntegrity": {
+    "missingNotZero": true,
+    "standardZeroNoScore": true,
+    "duplicateMaintenanceOnce": true,
+    "manualScoresPreserved": true,
+    "finalizedSnapshot": true
+  },
+  "importEdges": {
+    "leadingZeroAndSeparators": true,
+    "persianArabicDigits": true,
+    "conflictingHeaders": true,
+    "badDate": true,
+    "unknownReview": true,
+    "corruptFilesRejected": true,
+    "xmlSizeBound": true,
+    "fuzz": {
+      "seed": 61061,
+      "cases": 64
+    }
+  },
+  "violations": {
+    "pendingZero": true,
+    "independentApproval": true,
+    "duplicateNoDoubleDeduction": true,
+    "appealKeepsApprovedSnapshot": true,
+    "changedPolicyNoRetroactiveDeduction": true,
+    "reversalRestores": true,
+    "auditPreserved": true
+  }
+}

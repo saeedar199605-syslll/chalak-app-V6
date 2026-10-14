@@ -1,0 +1,12 @@
+[
+  "src/components/PersonnelImport.tsx",
+  "src/utils/db.ts",
+  "src/utils/disciplinaryViolations.ts",
+  "src/utils/evaluationPeriod.ts",
+  "src/utils/formulaEngine.ts",
+  "src/utils/personnelImport.ts",
+  "functions/api/auth/login.ts",
+  "functions/api/state.ts",
+  "cloudflare/auth.ts",
+  "cloudflare/operationReceipt.ts"
+]

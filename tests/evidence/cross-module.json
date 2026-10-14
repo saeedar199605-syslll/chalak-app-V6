@@ -1,0 +1,9 @@
+{
+  "http": 200,
+  "exactNamePersisted": true,
+  "revision": 35,
+  "employeesUi": true,
+  "newEvaluationSelector": true,
+  "bulkScoreUi": true,
+  "secondTabWithoutReload": true
+}

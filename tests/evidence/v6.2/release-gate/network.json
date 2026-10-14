@@ -1,0 +1,62 @@
+[
+  {
+    "sequence": 2,
+    "method": "POST",
+    "path": "/api/state",
+    "startedAt": "2026-10-13T16:23:23.785Z",
+    "forwardedAt": "2026-10-13T16:23:28.398Z",
+    "serverResponseAt": "2026-10-13T16:23:28.634Z",
+    "deliveredAt": "2026-10-13T16:23:28.635Z",
+    "operationId": "0ec51fca-2de1-4817-ab87-223becd8e493",
+    "baseRevision": 19,
+    "testMode": "delay",
+    "status": 200,
+    "serverRevisionWhileHeld": 19,
+    "serverValueWhileHeld": "QA62-GATE-SAVED",
+    "competing": null,
+    "response": {
+      "accepted": true,
+      "operationId": "0ec51fca-2de1-4817-ab87-223becd8e493",
+      "revision": 20,
+      "acceptedRevision": 20,
+      "payloadHash": "6e1f91644cddd111f1194aebae3b8e5883b08d7371a0fd26a9a3c3b1db5f7780",
+      "storage": "sqlite-durable-object",
+      "protocolVersion": 2,
+      "code": null,
+      "reason": null,
+      "retryable": null
+    }
+  },
+  {
+    "sequence": 8,
+    "method": "POST",
+    "path": "/api/state",
+    "startedAt": "2026-10-13T16:25:50.344Z",
+    "forwardedAt": "2026-10-13T16:25:50.602Z",
+    "serverResponseAt": "2026-10-13T16:25:50.648Z",
+    "deliveredAt": "2026-10-13T16:25:50.650Z",
+    "operationId": "7b95c767-f251-46da-8413-7fdb4e0497ee",
+    "baseRevision": 20,
+    "testMode": "race",
+    "status": 409,
+    "serverRevisionWhileHeld": 20,
+    "serverValueWhileHeld": "QA62-GATE-ACK",
+    "competing": {
+      "operationId": "1f3f3ea2-b9ff-4cf5-af96-3b025b65d720",
+      "http": 200,
+      "revision": 21
+    },
+    "response": {
+      "accepted": null,
+      "operationId": null,
+      "revision": 21,
+      "acceptedRevision": null,
+      "payloadHash": null,
+      "storage": null,
+      "protocolVersion": null,
+      "code": "revision_conflict",
+      "reason": "stale_revision",
+      "retryable": false
+    }
+  }
+]

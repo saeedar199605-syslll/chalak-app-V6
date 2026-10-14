@@ -1,0 +1,13 @@
+{
+  "pendingDeduction": 0,
+  "selfApprovalHttp": 403,
+  "approvalHttp": 200,
+  "approvedDeduction": 2,
+  "duplicateHttp": 409,
+  "policyChangePreservesSnapshot": true,
+  "appealNoUnauthorizedChange": true,
+  "reversedDeduction": 0,
+  "rejectedNoDeduction": true,
+  "originalScoresPreserved": true,
+  "serverAuditPreserved": true
+}

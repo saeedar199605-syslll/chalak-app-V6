@@ -1,0 +1,22 @@
+{
+  "stalePersonnel": {
+    "updates": 1,
+    "status": "EXISTING_UPDATED"
+  },
+  "finalizedScore": {
+    "snapshot": 60,
+    "withChangedLiveProfile": 92
+  },
+  "wrongPeriodViolation": {
+    "rejected": false,
+    "deduction": 2
+  },
+  "reorderedStoredMapping": "QA",
+  "unrelatedFirstSheet": {
+    "parsed": false
+  },
+  "incompatibleReceipt": {
+    "http": 200,
+    "accepted": true
+  }
+}

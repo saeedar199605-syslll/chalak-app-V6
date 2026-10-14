@@ -1,0 +1,19 @@
+{
+  "finalSourceRace": [
+    409,
+    200
+  ],
+  "violationApproval": {
+    "http": 200,
+    "recordPersisted": true,
+    "deductionPersisted": true,
+    "auditPersisted": true,
+    "metrics": {
+      "serializedRecords": 3,
+      "auditRecords": 1,
+      "evaluationRecords": 1,
+      "sqlWrites": 6
+    }
+  },
+  "realAdminLogin": 200
+}

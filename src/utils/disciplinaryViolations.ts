@@ -1,6 +1,6 @@
 import type { Employee, Evaluation } from '../types';
 import { authorize, type GranularPermissionPolicy } from './authorization';
-import { getEvaluationPeriodId } from './evaluationPeriod';
+import { getEvaluationPeriodId, businessDateBelongsToPeriod } from './evaluationPeriod';
 import { normalizePersonnelCode } from './personnelSearch';
 import { getJalaliDateKey } from './iranDate';
 import { parseBusinessDate } from './businessDate';
@@ -54,6 +54,7 @@ export function applyViolationCommands(args: { records: ViolationRecord[]; evalu
     if (incoming) {
       if (!text(incoming.id, 100) || !text(incoming.periodId, 200) || !parseBusinessDate(incoming.date) || !text(incoming.categoryId, 100) || !text(incoming.severity, 100) || !text(incoming.evidence) || !text(incoming.description) || !['manual', 'excel'].includes(incoming.source) || incoming.externalId !== undefined && !text(incoming.externalId, 150)) throw new ViolationError('شناسه، تاریخ، دوره، دسته، شدت، شرح و مدرک معتبر الزامی است.');
       if (!args.policy.categories.some(c => c.id === incoming.categoryId && Object.hasOwn(c.points, incoming.severity))) throw new ViolationError('دسته یا شدت در سیاست ثبت نشده است.');
+      if (!businessDateBelongsToPeriod(incoming.date, incoming.periodId)) throw new ViolationError('تاریخ تخلف داخل دوره ارزیابی قابل تشخیص نیست؛ دوره و تاریخ را بررسی کنید.');
       next = { id: incoming.id, employeeId: employee.id, periodId: incoming.periodId, date: getJalaliDateKey(parseBusinessDate(incoming.date)!), categoryId: incoming.categoryId, severity: incoming.severity, evidence: incoming.evidence.trim(), description: incoming.description.trim(), source: incoming.source, ...(incoming.externalId ? { externalId: incoming.externalId } : {}), status: 'draft', reporterId: args.actor.id, points: 0, history: [] };
       if (byId.has(next.id) || incidents.has(incidentKey(next)) || next.externalId && external.has(`${next.source}:${next.externalId}`)) throw new ViolationError('تخلف تکراری است؛ هیچ داده‌ای دوباره ثبت نشد.', 409);
       incidents.add(incidentKey(next)); if (next.externalId) external.add(`${next.source}:${next.externalId}`);
@@ -67,6 +68,7 @@ export function applyViolationCommands(args: { records: ViolationRecord[]; evalu
         const evaluation = evaluations.get(`${old.employeeId}\u0000${old.periodId}`);
         if (!evaluation || evaluation.status !== 'draft' || evaluation.stage === 'completed') throw new ViolationError('کسر یا برگشت برای پرونده نهایی یا دوره فاقد پرونده فعال مجاز نیست.', 403);
         if (command.action === 'approve') {
+          if (!businessDateBelongsToPeriod(old.date, old.periodId)) throw new ViolationError('تاریخ تخلف به این دوره تعلق ندارد؛ کسر امتیاز متوقف شد.', 403);
           const p = args.policy; const category = p.categories.find(c => c.id === old.categoryId); const date = parseBusinessDate(old.date)!;
           if (!validViolationPolicy(p) || !p.active || date < parseBusinessDate(p.effectiveFrom)! || date > parseBusinessDate(p.effectiveUntil)! || !category || !Object.hasOwn(category.points, old.severity)) throw new ViolationError('سیاست مصوب و فعال برای تاریخ تخلف موجود نیست.', 403);
           if (old.reporterId === args.actor.id || old.employeeId === args.actor.id) throw new ViolationError('ثبت‌کننده نمی‌تواند تخلف خودش را تأیید کند.', 403);

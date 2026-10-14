@@ -9,7 +9,7 @@ interface Context {
 
 export async function onRequest(context: Context): Promise<Response> {
   const path = new URL(context.request.url).pathname;
-  if (path === '/api/health' || path === '/api/auth/login' || path === '/api/auth/logout') return context.next();
+  if (path === '/api/state' || path === '/api/storage' || path === '/api/health' || path === '/api/auth/login' || path === '/api/auth/logout') { try { return await context.next(); } catch { return jsonResponse({error:'مرجع هویت یا ذخیره تراکنشی در دسترس نیست.',code:'transaction_store_unavailable',retryable:false},503); } }
   if (context.request.method === 'OPTIONS') return context.next();
 
   if (!context.env.CHALAK_DB) return jsonResponse({ error: 'پایگاه داده ابری پیکربندی نشده است.', code: 'storage_not_configured', reason: 'storage_configuration_missing', retryable: false }, 503);

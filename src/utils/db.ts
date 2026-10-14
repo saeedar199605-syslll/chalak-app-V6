@@ -1,3 +1,5 @@
+import { materializeStatePatch } from '../../cloudflare/statePatch';
+import { stateOperationHash, isAcceptedOperation } from '../../cloudflare/operationReceipt';
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -384,13 +386,16 @@ export class AppDatabase {
       this.activeManagedWrites += 1;
       this.maxConcurrentManagedWrites = Math.max(this.maxConcurrentManagedWrites, this.activeManagedWrites);
       const operationId = this.pendingBulkOperation?.id || this.pendingStateCommit?.id || JSON.parse(body).operationId;
+      const envelope = JSON.parse(body);
+      const expectedHash = await stateOperationHash(envelope);
       let receiptReadSucceeded = false;
       const reconcile = async (): Promise<Response | null> => {
         if (!operationId) return null;
         try {
           const response = await fetch(`/api/state?operationId=${encodeURIComponent(operationId)}`, { credentials: 'same-origin', signal: AbortSignal.timeout(15_000) });
-          receiptReadSucceeded = response.ok;
-          if (response.ok && (await response.clone().json()).accepted === true) return response;
+          const receipt = await response.clone().json();
+          receiptReadSucceeded = response.ok && receipt.storage === 'sqlite-durable-object' && receipt.protocolVersion === 2 && receipt.accepted === false && receipt.operationId === operationId && Number.isInteger(receipt.revision);
+          if (response.ok && isAcceptedOperation(receipt, operationId, expectedHash)) return response;
         } catch { /* An unconfirmed receipt is never success. */ }
         return null;
       };
@@ -405,6 +410,12 @@ export class AppDatabase {
         });
         if (operationId && response.status === 503) {
           return await reconcile() || response;
+        }
+        if (response.ok) {
+          let ack: Record<string, unknown>;
+          try { ack = await response.clone().json(); } catch { ack = {}; }
+          const ignoredLogOnly = ack.storage === 'sqlite-durable-object' && ack.protocolVersion === 2 && Object.keys(envelope.state || {}).length === 1 && Object.hasOwn(envelope.state, 'pe_system_logs') && ack.noMutation === true && ack.operationId === operationId;
+          if (!ignoredLogOnly && !isAcceptedOperation(ack, operationId, expectedHash)) return new Response(JSON.stringify({error:'تأیید سرور با شناسه، محتوای عملیات یا نسخه مورد انتظار منطبق نیست؛ نتیجه ذخیره نامطمئن است.', code:'operation_ack_mismatch', retryable:false}), {status:503, headers:{'Content-Type':'application/json'}});
         }
         return response;
       } catch (error) {
@@ -1561,11 +1572,12 @@ export class AppDatabase {
     }
   }
 
-  private applyRemoteState(remoteState: CloudState): string[] {
-    this.workflowContacts = Array.isArray(remoteState.pe_workflow_contacts) ? remoteState.pe_workflow_contacts as Employee[] : [];
+  private applyRemoteState(remoteState: CloudState, partial = false): string[] {
+    if (!partial || Object.hasOwn(remoteState,'pe_workflow_contacts')) this.workflowContacts = Array.isArray(remoteState.pe_workflow_contacts) ? remoteState.pe_workflow_contacts as Employee[] : [];
     let changed = false;
     const changedKeys: string[] = [];
     for (const key of CLOUD_SYNC_KEYS) {
+      if (partial && !Object.hasOwn(remoteState,key)) continue;
       if (key === 'pe_audit_logs') {
         // Immutable server audit history can be much larger than browser storage.
         // Preserve the complete server response in memory; never upload a truncated cache.
@@ -1622,7 +1634,7 @@ export class AppDatabase {
         return null;
       }
       const result = contentType.includes('application/json')
-        ? await res.json() as { state?: CloudState; revision?: number; updatedAt?: string; error?: string; code?: string; reason?: string; retryable?: boolean }
+        ? await res.json() as { state?: CloudState; statePatch?:boolean; storage?:string; protocolVersion?:number; revision?: number; updatedAt?: string; error?: string; code?: string; reason?: string; retryable?: boolean }
         : {};
       if (!isCurrentSyncGeneration(requestGeneration, this.syncGeneration)) return null;
       if (!res.ok) {
@@ -1632,6 +1644,7 @@ export class AppDatabase {
         return null;
       }
 
+      if(result.storage !== 'sqlite-durable-object' || result.protocolVersion !== 2) { this.emitCloudStatus('error','نسخه سرور با ذخیره تراکنشی سازگار نیست؛ داده قدیمی جایگزین تغییرات شما نمی‌شود.',{code:'backend_protocol_mismatch',retryable:false});return null; }
       const cloudState = result.state && typeof result.state === 'object' ? result.state : {};
       this.cloudRevision = Number.isInteger(result.revision) ? Number(result.revision) : this.cloudRevision;
       this.lastSuccessfulReadAt = result.updatedAt || new Date().toISOString();
@@ -1882,8 +1895,9 @@ export class AppDatabase {
         return false;
       }
       const result = contentType.includes('application/json')
-        ? await res.json() as { state?: CloudState; revision?: number; updatedAt?: string; error?: string; code?: string; reason?: string; retryable?: boolean }
+        ? await res.json() as { state?: CloudState; statePatch?:boolean; storage?:string; protocolVersion?:number; revision?: number; updatedAt?: string; error?: string; code?: string; reason?: string; retryable?: boolean }
         : {};
+      if (res.ok && result.state) result.state = materializeStatePatch(result as any, key => { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : undefined; });
       if (!isCurrentSyncGeneration(requestGeneration, this.syncGeneration)) return false;
       if (!res.ok) {
         if (!shouldRetryCloudStatus(res.status, result.retryable) && res.status !== 409 && res.status !== 401) this.pendingOperationIds.delete(operationId);
@@ -1932,7 +1946,7 @@ export class AppDatabase {
       if (this.pendingSyncOperation?.id === operationId) this.pendingSyncOperation = undefined;
       this.terminalRejectedSnapshot = null;
       if (sourceImportContext && this.pendingSourceImportContext?.operationId === sourceImportContext.operationId) this.pendingSourceImportContext = null;
-      const reconciledKeys = result.state && typeof result.state === 'object' ? this.applyRemoteState(result.state) : [];
+      const reconciledKeys = result.state && typeof result.state === 'object' ? this.applyRemoteState(result.state, result.statePatch === true) : [];
       const acceptedKeys = [...new Set([...sentRaw.keys(), ...reconciledKeys])];
       this.publishAcceptedDomainChanges(acceptedKeys, 'accepted_write', operationId, this.cloudRevision);
       this.announceAcceptedCrossTabChange(acceptedKeys, operationId);

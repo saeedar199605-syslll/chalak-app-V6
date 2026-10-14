@@ -1,0 +1,61 @@
+{
+  "independentWorkers": {
+    "http": [
+      200,
+      503
+    ],
+    "acceptedRevisions": [
+      2,
+      null
+    ],
+    "finalRevision": 2,
+    "writerAValuePersisted": true,
+    "writerBValuePersisted": false,
+    "twoReadersAgree": true
+  },
+  "sameWorker": {
+    "idempotentReplay": true,
+    "conflictHttp": 409,
+    "unauthorizedHttp": 403,
+    "unauthenticatedHttp": 401,
+    "historicalPreserved": true
+  },
+  "measurements": [
+    {
+      "status": 200,
+      "elapsedMs": 157,
+      "requestCharacters": 352,
+      "responseCharacters": 3342
+    },
+    {
+      "status": 503,
+      "elapsedMs": 393,
+      "requestCharacters": 376,
+      "responseCharacters": 239
+    },
+    {
+      "status": 200,
+      "elapsedMs": 98,
+      "requestCharacters": 440,
+      "responseCharacters": 4258
+    },
+    {
+      "status": 200,
+      "elapsedMs": 29,
+      "requestCharacters": 440,
+      "responseCharacters": 4258
+    },
+    {
+      "status": 409,
+      "elapsedMs": 31,
+      "requestCharacters": 440,
+      "responseCharacters": 220
+    },
+    {
+      "status": 403,
+      "elapsedMs": 35,
+      "requestCharacters": 419,
+      "responseCharacters": 102
+    }
+  ]
+}

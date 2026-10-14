@@ -21,7 +21,20 @@
       ]
     },
     "allowImportingTsExtensions": true,
-    "noEmit": true
+    "noEmit": true,
+    "types": [
+      "node"
+    ]
   },
-  "exclude": ["dist", "node_modules", "verification-evidence", "test-results"]
+  "exclude": [
+    "dist",
+    "node_modules",
+    "verification-evidence",
+    "test-results",
+    "**/*-private.*",
+    "tests/.*",
+    ".qa-quarantine",
+    ".wrangler",
+    "storage-worker"
+  ]
 }

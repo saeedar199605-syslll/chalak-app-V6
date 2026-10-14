@@ -1,0 +1,28 @@
+[
+  {
+    "scenario": "import_vs_manual_score",
+    "mode": "Injected stale reads; final handler; actual isolated Pages/KV writes",
+    "http": [
+      200,
+      200
+    ],
+    "revisions": [
+      34,
+      34
+    ],
+    "bothChangesPersisted": false
+  },
+  {
+    "scenario": "same_criterion",
+    "mode": "Injected stale reads; final handler; actual isolated Pages/KV writes",
+    "http": [
+      200,
+      200
+    ],
+    "revisions": [
+      35,
+      35
+    ],
+    "bothChangesPersisted": false
+  }
+]

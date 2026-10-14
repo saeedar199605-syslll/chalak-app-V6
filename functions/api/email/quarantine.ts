@@ -1,3 +1,4 @@
+import { forwardAuthority } from '../../../cloudflare/authority';
 import { AuthSession, CloudflareEnv, jsonResponse } from '../../../cloudflare/auth';
 
 interface Context { request: Request; env: CloudflareEnv; data: { session?: AuthSession } }
@@ -34,12 +35,11 @@ export async function onRequestPost({ request, env, data }: Context): Promise<Re
   if (body.action === 'approved' && item.status !== 'previewed') return jsonResponse({ error: 'Preview the quarantined attachment before approval.' }, 409);
   let importType: string | undefined;
   if (body.action === 'approved') {
-    const stateRaw = await env.CHALAK_DB.get('app_state');
-    if (!stateRaw) return jsonResponse({ error: 'A persisted MIS/Kasra import receipt is required.' }, 409);
-    let state: Record<string, unknown>;
-    try { state = JSON.parse(stateRaw) as Record<string, unknown>; } catch { return jsonResponse({ error: 'The import receipt could not be verified.' }, 503); }
-    const receipt = (Array.isArray(state.__operation_receipts) ? state.__operation_receipts : []) as Array<Record<string, unknown>>;
-    const acceptedReceipt = receipt.find(entry => entry.operationId === body.operationId && entry.actorId === data.session!.id);
+    const response = await forwardAuthority(new Request('https://authority/api/state?operationId='+encodeURIComponent(String(body.operationId)),{headers:request.headers}),env);
+    if(!response.ok)return jsonResponse({error:'The transactional import receipt is unavailable.'},503);
+    const result=await response.json() as {accepted?:boolean;state?:Record<string,unknown>};
+    const state=result.state||{};
+    const acceptedReceipt=result.accepted===true;
     const auditLogs = Array.isArray(state.pe_audit_logs) ? state.pe_audit_logs as Array<Record<string, unknown>> : [];
     const importAudit = auditLogs.find(entry => entry.id === `audit:source_import:${body.operationId}` && entry.actorId === data.session!.id && entry.result === 'accepted' && (entry.importType === 'MIS' || entry.importType === 'KASRA'));
     if (!acceptedReceipt || !importAudit) return jsonResponse({ error: 'The operation is not a persisted MIS/Kasra import accepted by this administrator.' }, 409);

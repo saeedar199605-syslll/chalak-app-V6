@@ -1,0 +1,16 @@
+node_modules/
+dist/
+release/
+.wrangler/
+test-results/
+.dev.vars
+.env
+.env.*
+*-private*
+tests/.*
+*.zip
+BACKUP*.json
+STATE.json
+META.json
+MIGRATED.json
+*.xlsx

@@ -1,3 +1,4 @@
+import { readIdentityState } from '../../../cloudflare/authority';
 import {
   AuthSession,
   CloudflareEnv,
@@ -53,9 +54,18 @@ export async function onRequestPost({ request, env }: Context): Promise<Response
     const stored = await env.CHALAK_DB.get('credential:admin');
     valid = stored ? await verifyPassword(password, stored) : password === env.ADMIN_PASSWORD;
     employee = { id: 'emp-admin', name: 'مدیریت ارشد', username: 'admin', code: 'ADMIN-001', role: 'admin', profileId: 'prof-3', unit: 'دفتر مرکزی' };
+    if (valid) {
+      const state = await readIdentityState(env);
+      const employees = Array.isArray(state.pe_employees) ? state.pe_employees as EmployeeRecord[] : [];
+      if (employees.length) {
+        const matches = employees.filter(e => normalizeUsername(e.username) === 'admin');
+        const locked = Array.isArray(state.pe_locked_users) ? state.pe_locked_users.map(String) : [];
+        if (matches.length !== 1 || matches[0].role !== 'admin' || matches[0].employmentStatus === 'inactive' || matches[0].employmentStatus === 'unknown' || locked.includes(matches[0].id) || locked.includes('admin')) return jsonResponse({ error: 'هویت یا دسترسی مدیر در بانک پرسنل فعال نیست.', code: 'admin_identity_inactive' }, 403);
+        employee = matches[0];
+      }
+    }
   } else {
-    const rawState = await env.CHALAK_DB.get('app_state');
-    const state = rawState ? JSON.parse(rawState) as Record<string, unknown> : {};
+    const state = await readIdentityState(env);
     const employees = Array.isArray(state.pe_employees) ? state.pe_employees as EmployeeRecord[] : [];
     employee = employees.find(item => normalizeUsername(item.username) === username || String(item.code || '').toLowerCase() === username);
     if (employee && employee.role !== 'admin') {

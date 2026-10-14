@@ -1,0 +1,8 @@
+{
+  "typecheck": "PASS: application and separate Worker compiler context",
+  "build": "PASS: final index-BU24H1rZ.js,20.38s",
+  "partialAckCacheRegression": "PASS; client-only simulated storage, not persistence evidence",
+  "browserFollowup": "INTERRUPTED: browser transport closed before fresh-origin recheck",
+  "productionDeployed": false,
+  "testPersistence": "actual isolated SQLite DO and actual isolated rollback KV"
+}

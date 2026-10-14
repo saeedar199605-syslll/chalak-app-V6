@@ -1,0 +1,17 @@
+{
+  "workerConfig": "VALID_LOCAL",
+  "workerName": "chalak-state-authority",
+  "class": "ChalakState",
+  "storage": "SQLite migration new_sqlite_classes",
+  "pagesBinding": "CHALAK_STATE",
+  "pagesScriptName": "chalak-state-authority",
+  "sameCredentialKvBinding": true,
+  "scopeObjectName": "chalak-authoritative-state-v1",
+  "operationalKvReadersWriters": [],
+  "actualLocalPagesBindingConnected": true,
+  "existingSourceConfigUnchanged": true,
+  "productionAccountAuthenticated": false,
+  "liveBindingsAndSecretNamesVerified": false,
+  "productionDeployed": false,
+  "blocker": "Wrangler whoami reports not authenticated; live project binding/secret inventory and legacy URL freeze coverage cannot be verified"
+}

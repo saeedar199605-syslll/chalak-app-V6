@@ -1,0 +1,12 @@
+{
+  "version": "7.0.0",
+  "results": {
+    "package-verifies": "PASS",
+    "tamper-and-forbidden-files-detected": "PASS",
+    "release-identity": "PASS",
+    "no-operational-kv-writes": "PASS",
+    "deploy-gate": "PASS",
+    "preflight-read-only-and-fails-closed": "PASS",
+    "base-identity": "PASS"
+  }
+}

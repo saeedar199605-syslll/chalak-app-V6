@@ -1,0 +1,360 @@
+--- v6.0/src/components/PersonnelImport.tsx
++++ v6.1/src/components/PersonnelImport.tsx
+@@ -1,38 +1,38 @@
+-import React, { useRef, useState } from 'react';
+-import type { Employee, JobProfile } from '../types';
+-import { db } from '../utils/db';
+-import { readWorkbookRows, type ParsedWorkbook } from '../utils/excelWorkbook';
+-import { identifyPersonnelHeaders, parsePersonnelWorkbook, preparePersonnelImport, PERSONNEL_ALIASES, type PersonnelMapping } from '../utils/personnelImport';
+-import { canImport } from '../utils/authorization';
+-
+-export default function PersonnelImport({ actor, profiles }: {actor:Employee;profiles:JobProfile[]}) {
+-  const [workbook,setWorkbook]=useState<ParsedWorkbook|null>(null), [mappings,setMappings]=useState<Record<string,PersonnelMapping>>({});
+-  const [plan,setPlan]=useState<ReturnType<typeof preparePersonnelImport>|null>(null), [counts,setCounts]=useState<ReturnType<typeof parsePersonnelWorkbook>['identityCounts']|null>(null);
+-  const [busy,setBusy]=useState(false), [message,setMessage]=useState(''), [reference,setReference]=useState(''), [date,setDate]=useState(''), [profile,setProfile]=useState(''), [approved,setApproved]=useState(false), [page,setPage]=useState(0);
+-  const operation=useRef(''), submitting=useRef(false), expected=useRef<string|null>(null);
+-  const allowed=canImport(actor,'employee').allowed;
+-  const sheets=workbook ? (['پرسنل چالاک','پرسنل چالاک 2'].every(n=>workbook.rowsBySheet[n])?['پرسنل چالاک','پرسنل چالاک 2']:workbook.sheets.slice(0,1)) : [];
+-  const labels:Record<string,string>={code:'کد پرسنلی',name:'نام کامل',firstName:'نام',lastName:'نام خانوادگی',unit:'واحد',approvedJobTitle:'عنوان مصوب',internalJobDescription:'شرح وظیفه',shift:'شیفت',employmentStart:'شروع همکاری',employmentEnd:'ترک کار'};
+-  const states:Record<string,string>={NEW:'جدید',EXISTING_UNCHANGED:'بدون تغییر',EXISTING_UPDATED:'ویرایش',DUPLICATE_IN_FILE:'تکراری',CONFLICT:'متناقض',INACTIVE:'غیرفعال',INVALID:'نامعتبر',NEEDS_REVIEW:'نیازمند بررسی'};
+-  if(!allowed) return null;
+-  const preview=()=>{ if(!workbook)return; try {const parsed=parsePersonnelWorkbook(workbook,mappings);expected.current=localStorage.getItem('pe_employees');setCounts(parsed.identityCounts);setPlan(preparePersonnelImport(parsed.inputs,db.getEmployees(),profiles,{approved,reference,effectiveDate:date,newProfileId:profile}));operation.current=crypto.randomUUID();setPage(0);setMessage('پیش‌نمایش آماده شد؛ هیچ داده عملیاتی روی سرور نوشته نشد.');}catch(e){setMessage((e as Error).message);}};
+-  const confirm=async()=>{if(!plan||!plan.updates.length||submitting.current)return;submitting.current=true;setBusy(true);try{
+-    const current=db.getEmployees(), changes=new Map(plan.updates.map(e=>[e.id,e]));const next=current.map(e=>changes.get(e.id)||e);for(const e of plan.updates)if(!current.some(x=>x.id===e.id))next.push(e);
+-    const accepted=await db.commitBulkState({pe_employees:next},operation.current,{pe_employees:expected.current},{importType:'EMPLOYEE',operationId:operation.current});
+-    if(!accepted){setMessage('ثبت تأیید نشد؛ پیش‌نمایش حفظ شد. در ۴۰۹ نسخه را بازبینی کنید؛ در ۵۰۳ یا قطع ارتباط، رسید عملیات پیش از ارسال دوباره بررسی می‌شود.');return;}
+-    setMessage(`ثبت سروری کامل شد: ${plan.counts.NEW} جدید، ${plan.counts.EXISTING_UPDATED} ویرایش، ${plan.counts.INACTIVE} غیرفعال، ${plan.counts.EXISTING_UNCHANGED} بدون تغییر؛ ${plan.rows.filter(r=>['INVALID','CONFLICT','NEEDS_REVIEW','DUPLICATE_IN_FILE'].includes(r.status)).length} ردشده/نیازمند بررسی.`);setPlan(null);
+-    db.saveMiscData('pe_personnel_header_mapping',mappings);
+-  }catch(e){setMessage((e as Error).message);}finally{submitting.current=false;setBusy(false);}};
+-  return <details className="border rounded-xl p-4 space-y-3" dir="rtl"><summary className="font-bold">ورود اطلاعات پرسنلی — بررسی و ثبت سروری</summary>
+-    <p>انتخاب فایل ← شناسایی ستون‌ها ← بررسی اطلاعات ← تأیید و ذخیره ← گزارش نتیجه. حضور در اکسل، تأیید فعال‌بودن یا تغییر سمت نیست. افراد غایب حذف نمی‌شوند.</p>
+-    <fieldset disabled={busy||!!plan}><input aria-label="فایل بانک پرسنل" type="file" accept=".xlsx,.xls,.xml,.csv" onChange={async e=>{const f=e.target.files?.[0];if(!f)return;setBusy(true);setMessage('در حال خواندن فایل…');try{const w=await readWorkbookRows(f);setWorkbook(w);const selected=['پرسنل چالاک','پرسنل چالاک 2'].every(n=>w.rowsBySheet[n])?['پرسنل چالاک','پرسنل چالاک 2']:w.sheets.slice(0,1);const saved=db.getMiscData<Record<string,PersonnelMapping>>('pe_personnel_header_mapping',{});const m:Record<string,PersonnelMapping>={};for(const n of selected){try{m[n]=identifyPersonnelHeaders(w.rowsBySheet[n],saved[n]).mapping;}catch{m[n]={};}}setMappings(m);setMessage('فایل خوانده شد؛ نگاشت و وضعیت استخدامی را بررسی کنید.');}catch(e){setMessage((e as Error).message);}finally{setBusy(false);}}}/>
+-      {sheets.map(n=>{let headers:string[]=[];try{headers=identifyPersonnelHeaders(workbook!.rowsBySheet[n]).headers;}catch{headers=workbook!.rowsBySheet[n][0].map(String);}return <details key={n}><summary>ستون‌های {n}</summary>{Object.keys(PERSONNEL_ALIASES).map(key=><label key={key} className="block">{labels[key]}<select aria-label={`${n}: ${labels[key]}`} value={mappings[n]?.[key]?.[0]??''} onChange={e=>setMappings({...mappings,[n]:{...mappings[n],[key]:e.target.value===''?[]:[Number(e.target.value)]}})}><option value="">نادیده/خالی</option>{headers.map((h,i)=><option key={i} value={i}>{i+1}: {h}</option>)}</select></label>)}</details>})}
+-      <input aria-label="تاریخ مؤثر پرسنل" placeholder="تاریخ مؤثر، 1405/07/20" value={date} onChange={e=>setDate(e.target.value)}/><input aria-label="مرجع تصویب پرسنل" placeholder="مرجع تأیید منبع و وضعیت استخدامی" value={reference} onChange={e=>setReference(e.target.value)}/>
+-      <select aria-label="پروفایل مصوب کارکنان جدید" value={profile} onChange={e=>setProfile(e.target.value)}><option value="">پروفایل جدیدها فقط پس از تأیید</option>{profiles.map(p=><option key={p.id} value={p.id}>{p.title}</option>)}</select>
+-      <label><input type="checkbox" checked={approved} onChange={e=>setApproved(e.target.checked)}/>اعتبار منبع، تاریخ مؤثر و وضعیت استخدامی ردیف‌های مجاز را بررسی و تأیید کرده‌ام.</label><button type="button" disabled={!workbook} onClick={preview}>بررسی اطلاعات و پیش‌نمایش</button>
+-    </fieldset>
+-    {counts&&<p>اصلی {counts.main}؛ ثانویه {counts.secondary}؛ مشترک {counts.overlap}؛ فقط ثانویه {counts.secondaryOnly}؛ هویت یکتا {counts.distinct} — تعداد کارکنان فعال محسوب نمی‌شود.</p>}
+-    {plan&&<div aria-label="پیش‌نمایش بانک پرسنل"><p>{Object.entries(plan.counts).map(([k,v])=>`${states[k]}: ${v}`).join('؛ ')}</p><table><thead><tr><th>سطر/شیت</th><th>کد</th><th>وضعیت</th><th>مقدار قبلی ← جدید / علت</th></tr></thead><tbody>{plan.rows.slice(page*25,(page+1)*25).map((r,i)=><tr key={i}><td>{r.input.sheet} / {r.input.row}</td><td>{r.input.data.code}</td><td>{states[r.status]}</td><td>{r.changes.map(c=>`${labels[c.field]||c.field}: ${c.before||'خالی'} ← ${c.after}`).join('؛ ')} {r.issues.join('؛ ')}</td></tr>)}</tbody></table><button disabled={busy||page===0} onClick={()=>setPage(page-1)}>قبلی</button><button disabled={busy||(page+1)*25>=plan.rows.length} onClick={()=>setPage(page+1)}>بعدی</button><button type="button" disabled={busy||!plan.updates.length} onClick={()=>void confirm()}>{busy?'در حال ذخیره روی سرور…':'تأیید و ثبت تغییرات مجاز'}</button><button disabled={busy} onClick={()=>setPlan(null)}>بازبینی / انصراف</button></div>}
+-    <p role="status">{busy?'در حال پردازش؛ تأیید مجدد غیرفعال است.':message}</p>
+-  </details>;
+-}
++import React, { useRef, useState } from 'react';
++import type { Employee, JobProfile } from '../types';
++import { db } from '../utils/db';
++import { readWorkbookRows, type ParsedWorkbook } from '../utils/excelWorkbook';
++import { identifyPersonnelHeaders, parsePersonnelWorkbook, preparePersonnelImport, PERSONNEL_ALIASES, restorePersonnelMapping, personnelWorkbookSheets, type SavedPersonnelMapping, type PersonnelMapping } from '../utils/personnelImport';
++import { canImport } from '../utils/authorization';
++
++export default function PersonnelImport({ actor, profiles }: {actor:Employee;profiles:JobProfile[]}) {
++  const [workbook,setWorkbook]=useState<ParsedWorkbook|null>(null), [mappings,setMappings]=useState<Record<string,PersonnelMapping>>({});
++  const [plan,setPlan]=useState<ReturnType<typeof preparePersonnelImport>|null>(null), [counts,setCounts]=useState<ReturnType<typeof parsePersonnelWorkbook>['identityCounts']|null>(null);
++  const [busy,setBusy]=useState(false), [message,setMessage]=useState(''), [reference,setReference]=useState(''), [date,setDate]=useState(''), [profile,setProfile]=useState(''), [approved,setApproved]=useState(false), [page,setPage]=useState(0);
++  const operation=useRef(''), submitting=useRef(false), expected=useRef<string|null>(null);
++  const allowed=canImport(actor,'employee').allowed;
++  const [sheets,setSheets] = useState<string[]>([]);
++  const labels:Record<string,string>={code:'کد پرسنلی',name:'نام کامل',firstName:'نام',lastName:'نام خانوادگی',unit:'واحد',approvedJobTitle:'عنوان مصوب',internalJobDescription:'شرح وظیفه',shift:'شیفت',employmentStart:'شروع همکاری',employmentEnd:'ترک کار'};
++  const states:Record<string,string>={NEW:'جدید',EXISTING_UNCHANGED:'بدون تغییر',EXISTING_UPDATED:'ویرایش',DUPLICATE_IN_FILE:'تکراری',CONFLICT:'متناقض',INACTIVE:'غیرفعال',INVALID:'نامعتبر',NEEDS_REVIEW:'نیازمند بررسی'};
++  if(!allowed) return null;
++  const preview=()=>{ if(!workbook)return; try {const parsed=parsePersonnelWorkbook(workbook,mappings);expected.current=localStorage.getItem('pe_employees');setCounts(parsed.identityCounts);setPlan(preparePersonnelImport(parsed.inputs,db.getEmployees(),profiles,{approved,reference,effectiveDate:date,newProfileId:profile}));operation.current=crypto.randomUUID();setPage(0);setMessage('پیش‌نمایش آماده شد؛ هیچ داده عملیاتی روی سرور نوشته نشد.');}catch(e){setMessage((e as Error).message);}};
++  const confirm=async()=>{if(!plan||!plan.updates.length||submitting.current)return;submitting.current=true;setBusy(true);try{
++    const current=db.getEmployees(), changes=new Map(plan.updates.map(e=>[e.id,e]));const next=current.map(e=>changes.get(e.id)||e);for(const e of plan.updates)if(!current.some(x=>x.id===e.id))next.push(e);
++    const accepted=await db.commitBulkState({pe_employees:next},operation.current,{pe_employees:expected.current},{importType:'EMPLOYEE',operationId:operation.current});
++    if(!accepted){setMessage('ثبت تأیید نشد؛ پیش‌نمایش حفظ شد. در ۴۰۹ نسخه را بازبینی کنید؛ در ۵۰۳ یا قطع ارتباط، رسید عملیات پیش از ارسال دوباره بررسی می‌شود.');return;}
++    setMessage(`ثبت سروری کامل شد: ${plan.counts.NEW} جدید، ${plan.counts.EXISTING_UPDATED} ویرایش، ${plan.counts.INACTIVE} غیرفعال، ${plan.counts.EXISTING_UNCHANGED} بدون تغییر؛ ${plan.rows.filter(r=>['INVALID','CONFLICT','NEEDS_REVIEW','DUPLICATE_IN_FILE'].includes(r.status)).length} ردشده/نیازمند بررسی.`);setPlan(null);
++    if (workbook) db.saveMiscData('pe_personnel_header_mapping',Object.fromEntries(sheets.map(n=>[n,{headers:identifyPersonnelHeaders(workbook.rowsBySheet[n],mappings[n]).headers,mapping:mappings[n]}])));
++  }catch(e){setMessage((e as Error).message);}finally{submitting.current=false;setBusy(false);}};
++  return <details className="border rounded-xl p-4 space-y-3" dir="rtl"><summary className="font-bold">ورود اطلاعات پرسنلی — بررسی و ثبت سروری</summary>
++    <p>انتخاب فایل ← شناسایی ستون‌ها ← بررسی اطلاعات ← تأیید و ذخیره ← گزارش نتیجه. حضور در اکسل، تأیید فعال‌بودن یا تغییر سمت نیست. افراد غایب حذف نمی‌شوند.</p>
++    <fieldset disabled={busy||!!plan}><input aria-label="فایل بانک پرسنل" type="file" accept=".xlsx,.xls,.xml,.csv" onChange={async e=>{const f=e.target.files?.[0];if(!f)return;setBusy(true);setMessage('در حال خواندن فایل…');try{const w=await readWorkbookRows(f);const selected=personnelWorkbookSheets(w);setWorkbook(w);setSheets(selected);const saved=db.getMiscData<Record<string,SavedPersonnelMapping>>('pe_personnel_header_mapping',{});const m:Record<string,PersonnelMapping>={};for(const n of selected){try{m[n]=identifyPersonnelHeaders(w.rowsBySheet[n],restorePersonnelMapping(w.rowsBySheet[n],saved[n])).mapping;}catch{m[n]={};}}setMappings(m);setMessage('فایل خوانده شد؛ نگاشت و وضعیت استخدامی را بررسی کنید.');}catch(e){setWorkbook(null);setSheets([]);setMappings({});setMessage((e as Error).message);}finally{setBusy(false);}}}/>
++      {sheets.map(n=>{let headers:string[]=[];try{headers=identifyPersonnelHeaders(workbook!.rowsBySheet[n]).headers;}catch{headers=workbook!.rowsBySheet[n][0].map(String);}return <details key={n}><summary>ستون‌های {n}</summary>{Object.keys(PERSONNEL_ALIASES).map(key=><label key={key} className="block">{labels[key]}<select aria-label={`${n}: ${labels[key]}`} value={mappings[n]?.[key]?.[0]??''} onChange={e=>setMappings({...mappings,[n]:{...mappings[n],[key]:e.target.value===''?[]:[Number(e.target.value)]}})}><option value="">نادیده/خالی</option>{headers.map((h,i)=><option key={i} value={i}>{i+1}: {h}</option>)}</select></label>)}</details>})}
++      <input aria-label="تاریخ مؤثر پرسنل" placeholder="تاریخ مؤثر، 1405/07/20" value={date} onChange={e=>setDate(e.target.value)}/><input aria-label="مرجع تصویب پرسنل" placeholder="مرجع تأیید منبع و وضعیت استخدامی" value={reference} onChange={e=>setReference(e.target.value)}/>
++      <select aria-label="پروفایل مصوب کارکنان جدید" value={profile} onChange={e=>setProfile(e.target.value)}><option value="">پروفایل جدیدها فقط پس از تأیید</option>{profiles.map(p=><option key={p.id} value={p.id}>{p.title}</option>)}</select>
++      <label><input type="checkbox" checked={approved} onChange={e=>setApproved(e.target.checked)}/>اعتبار منبع، تاریخ مؤثر و وضعیت استخدامی ردیف‌های مجاز را بررسی و تأیید کرده‌ام.</label><button type="button" disabled={!workbook} onClick={preview}>بررسی اطلاعات و پیش‌نمایش</button>
++    </fieldset>
++    {counts&&<p>اصلی {counts.main}؛ ثانویه {counts.secondary}؛ مشترک {counts.overlap}؛ فقط ثانویه {counts.secondaryOnly}؛ هویت یکتا {counts.distinct} — تعداد کارکنان فعال محسوب نمی‌شود.</p>}
++    {plan&&<div aria-label="پیش‌نمایش بانک پرسنل"><p>{Object.entries(plan.counts).map(([k,v])=>`${states[k]}: ${v}`).join('؛ ')}</p><table><thead><tr><th>سطر/شیت</th><th>کد</th><th>وضعیت</th><th>مقدار قبلی ← جدید / علت</th></tr></thead><tbody>{plan.rows.slice(page*25,(page+1)*25).map((r,i)=><tr key={i}><td>{r.input.sheet} / {r.input.row}</td><td>{r.input.data.code}</td><td>{states[r.status]}</td><td>{r.changes.map(c=>`${labels[c.field]||c.field}: ${c.before||'خالی'} ← ${c.after}`).join('؛ ')} {r.issues.join('؛ ')}</td></tr>)}</tbody></table><button disabled={busy||page===0} onClick={()=>setPage(page-1)}>قبلی</button><button disabled={busy||(page+1)*25>=plan.rows.length} onClick={()=>setPage(page+1)}>بعدی</button><button type="button" disabled={busy||!plan.updates.length} onClick={()=>void confirm()}>{busy?'در حال ذخیره روی سرور…':'تأیید و ثبت تغییرات مجاز'}</button><button disabled={busy} onClick={()=>setPlan(null)}>بازبینی / انصراف</button></div>}
++    <p role="status">{busy?'در حال پردازش؛ تأیید مجدد غیرفعال است.':message}</p>
++  </details>;
++}
+--- v6.0/src/utils/db.ts
++++ v6.1/src/utils/db.ts
+@@ -1,3 +1,4 @@
++import { stateOperationHash, isAcceptedOperation } from '../../cloudflare/operationReceipt';
+ /**
+  * @license
+  * SPDX-License-Identifier: Apache-2.0
+@@ -384,13 +385,16 @@
+       this.activeManagedWrites += 1;
+       this.maxConcurrentManagedWrites = Math.max(this.maxConcurrentManagedWrites, this.activeManagedWrites);
+       const operationId = this.pendingBulkOperation?.id || this.pendingStateCommit?.id || JSON.parse(body).operationId;
++      const envelope = JSON.parse(body);
++      const expectedHash = await stateOperationHash(envelope);
+       let receiptReadSucceeded = false;
+       const reconcile = async (): Promise<Response | null> => {
+         if (!operationId) return null;
+         try {
+           const response = await fetch(`/api/state?operationId=${encodeURIComponent(operationId)}`, { credentials: 'same-origin', signal: AbortSignal.timeout(15_000) });
+-          receiptReadSucceeded = response.ok;
+-          if (response.ok && (await response.clone().json()).accepted === true) return response;
++          const receipt = await response.clone().json();
++          receiptReadSucceeded = response.ok && receipt.accepted === false && receipt.operationId === operationId && Number.isInteger(receipt.revision);
++          if (response.ok && isAcceptedOperation(receipt, operationId, expectedHash)) return response;
+         } catch { /* An unconfirmed receipt is never success. */ }
+         return null;
+       };
+@@ -405,6 +409,12 @@
+         });
+         if (operationId && response.status === 503) {
+           return await reconcile() || response;
++        }
++        if (response.ok) {
++          let ack: Record<string, unknown>;
++          try { ack = await response.clone().json(); } catch { ack = {}; }
++          const ignoredLogOnly = Object.keys(envelope.state || {}).length === 1 && Object.hasOwn(envelope.state, 'pe_system_logs') && ack.noMutation === true && ack.operationId === operationId;
++          if (!ignoredLogOnly && !isAcceptedOperation(ack, operationId, expectedHash)) return new Response(JSON.stringify({error:'تأیید سرور با شناسه، محتوای عملیات یا نسخه مورد انتظار منطبق نیست؛ نتیجه ذخیره نامطمئن است.', code:'operation_ack_mismatch', retryable:false}), {status:503, headers:{'Content-Type':'application/json'}});
+         }
+         return response;
+       } catch (error) {
+--- v6.0/src/utils/disciplinaryViolations.ts
++++ v6.1/src/utils/disciplinaryViolations.ts
+@@ -1,6 +1,6 @@
+ import type { Employee, Evaluation } from '../types';
+ import { authorize, type GranularPermissionPolicy } from './authorization';
+-import { getEvaluationPeriodId } from './evaluationPeriod';
++import { getEvaluationPeriodId, businessDateBelongsToPeriod } from './evaluationPeriod';
+ import { normalizePersonnelCode } from './personnelSearch';
+ import { getJalaliDateKey } from './iranDate';
+ import { parseBusinessDate } from './businessDate';
+@@ -54,6 +54,7 @@
+     if (incoming) {
+       if (!text(incoming.id, 100) || !text(incoming.periodId, 200) || !parseBusinessDate(incoming.date) || !text(incoming.categoryId, 100) || !text(incoming.severity, 100) || !text(incoming.evidence) || !text(incoming.description) || !['manual', 'excel'].includes(incoming.source) || incoming.externalId !== undefined && !text(incoming.externalId, 150)) throw new ViolationError('شناسه، تاریخ، دوره، دسته، شدت، شرح و مدرک معتبر الزامی است.');
+       if (!args.policy.categories.some(c => c.id === incoming.categoryId && Object.hasOwn(c.points, incoming.severity))) throw new ViolationError('دسته یا شدت در سیاست ثبت نشده است.');
++      if (!businessDateBelongsToPeriod(incoming.date, incoming.periodId)) throw new ViolationError('تاریخ تخلف داخل دوره ارزیابی قابل تشخیص نیست؛ دوره و تاریخ را بررسی کنید.');
+       next = { id: incoming.id, employeeId: employee.id, periodId: incoming.periodId, date: getJalaliDateKey(parseBusinessDate(incoming.date)!), categoryId: incoming.categoryId, severity: incoming.severity, evidence: incoming.evidence.trim(), description: incoming.description.trim(), source: incoming.source, ...(incoming.externalId ? { externalId: incoming.externalId } : {}), status: 'draft', reporterId: args.actor.id, points: 0, history: [] };
+       if (byId.has(next.id) || incidents.has(incidentKey(next)) || next.externalId && external.has(`${next.source}:${next.externalId}`)) throw new ViolationError('تخلف تکراری است؛ هیچ داده‌ای دوباره ثبت نشد.', 409);
+       incidents.add(incidentKey(next)); if (next.externalId) external.add(`${next.source}:${next.externalId}`);
+@@ -67,6 +68,7 @@
+         const evaluation = evaluations.get(`${old.employeeId}\u0000${old.periodId}`);
+         if (!evaluation || evaluation.status !== 'draft' || evaluation.stage === 'completed') throw new ViolationError('کسر یا برگشت برای پرونده نهایی یا دوره فاقد پرونده فعال مجاز نیست.', 403);
+         if (command.action === 'approve') {
++          if (!businessDateBelongsToPeriod(old.date, old.periodId)) throw new ViolationError('تاریخ تخلف به این دوره تعلق ندارد؛ کسر امتیاز متوقف شد.', 403);
+           const p = args.policy; const category = p.categories.find(c => c.id === old.categoryId); const date = parseBusinessDate(old.date)!;
+           if (!validViolationPolicy(p) || !p.active || date < parseBusinessDate(p.effectiveFrom)! || date > parseBusinessDate(p.effectiveUntil)! || !category || !Object.hasOwn(category.points, old.severity)) throw new ViolationError('سیاست مصوب و فعال برای تاریخ تخلف موجود نیست.', 403);
+           if (old.reporterId === args.actor.id || old.employeeId === args.actor.id) throw new ViolationError('ثبت‌کننده نمی‌تواند تخلف خودش را تأیید کند.', 403);
+--- v6.0/src/utils/evaluationPeriod.ts
++++ v6.1/src/utils/evaluationPeriod.ts
+@@ -1,6 +1,20 @@
+ import type { Evaluation } from '../types';
+ import { normalizeDigits } from './personnelSearch';
+ import { getJalaliDateParts } from './iranDate';
++import { parseBusinessDate } from './businessDate';
++
++/** Reject unidentifiable periods rather than charge an incident to an arbitrary evaluation. */
++export function businessDateBelongsToPeriod(date: string, periodId: string): boolean {
++  let label: string;
++  try { label = normalizeDigits(periodId.startsWith('period:') ? decodeURIComponent(periodId.slice(7)) : periodId).replace(/\u200c/g,' ').trim().toLowerCase(); } catch { return false; }
++  const parsed = parseBusinessDate(date), year = label.match(/(?:^|\D)(1[34]\d{2})(?=\D|$)/);
++  if (!parsed || !year) return false;
++  const months = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
++  const monthly = new RegExp('(?:^|[\\s\\d_-])(?:'+months.join('|')+')(?:$|[\\s\\d_-])').test(label);
++  const span = monthly ? 1 : /بهار|تابستان|پاییز|پائيز|زمستان|سه\s*ماهه|\bq[1-4]\b|spring|summer|autumn|fall|winter|quarter/.test(label) ? 3 : /نیمه|نيمه|\bh[12]\b|half/.test(label) ? 6 : /سالانه|سال|annual|year/.test(label) || /^1[34]\d{2}$/.test(label) ? 12 : 0;
++  const start = getEvaluationPeriodStartOrdinal(label), parts = getJalaliDateParts(parsed), ordinal = parts.year * 12 + parts.month;
++  return span > 0 && start !== null && ordinal >= start && ordinal < start + span;
++}
+ 
+ /** Stable key for legacy periods while the persisted evaluation stores the key explicitly. */
+ export function canonicalEvaluationPeriodId(label: string): string {
+--- v6.0/src/utils/formulaEngine.ts
++++ v6.1/src/utils/formulaEngine.ts
+@@ -416,7 +416,7 @@
+   // If profiles are provided and the evaluation is not locked/calibrated, use the live weights from the profile.
+   // Otherwise, use the snapshot weights saved inside the evaluation.
+   let profile = profiles ? profiles.find(p => p.id === ev.profileId) : undefined;
+-  let useLiveWeights = profile && (ev.status === 'draft');
++  let useLiveWeights = profile && ev.status === 'draft' && ev.stage !== 'completed';
+ 
+   let totalWeight = 0;
+   let weightedSum = 0;
+--- v6.0/src/utils/personnelImport.ts
++++ v6.1/src/utils/personnelImport.ts
+@@ -15,6 +15,33 @@
+   employmentStart: ['تاریخ شروع همکاری'], employmentEnd: ['تاریخ ترک کار'],
+ };
+ export type PersonnelMapping = Record<string, number[]>;
++export interface SavedPersonnelMapping { headers: string[]; mapping: PersonnelMapping }
++/** Stored column positions are meaningful only with their original header identities. */
++export function restorePersonnelMapping(rows: unknown[][], saved: unknown): PersonnelMapping | undefined {
++  const value = saved as SavedPersonnelMapping | null;
++  if (!value || !Array.isArray(value.headers) || !value.mapping || typeof value.mapping !== 'object') return undefined;
++  let headers: string[];
++  try { headers = identifyPersonnelHeaders(rows).headers; } catch { headers = (rows[0] || []).map(v => String(v ?? '').trim()); }
++  const result: PersonnelMapping = {};
++  for (const [field,indexes] of Object.entries(value.mapping)) {
++    if (!Object.hasOwn(PERSONNEL_ALIASES,field) || !Array.isArray(indexes)) return undefined;
++    const positions = new Set<number>();
++    for (const index of indexes) {
++      if (!Number.isInteger(index) || typeof value.headers[index] !== 'string' || !value.headers[index].trim()) return undefined;
++      const matches = headers.flatMap((h,i) => normalizeSearchText(h) === normalizeSearchText(value.headers[index]) ? [i] : []);
++      if (!matches.length) return undefined;
++      matches.forEach(i => positions.add(i));
++    }
++    result[field] = [...positions];
++  }
++  return result;
++}
++export function personnelWorkbookSheets(workbook: ParsedWorkbook): string[] {
++  if (['پرسنل چالاک','پرسنل چالاک 2'].every(n => workbook.rowsBySheet[n])) return ['پرسنل چالاک','پرسنل چالاک 2'];
++  const matching = workbook.sheets.filter(n => { try { identifyPersonnelHeaders(workbook.rowsBySheet[n]); return true; } catch { return false; } });
++  if (matching.length > 1) throw new Error('چند شیت پرسنلی مستقل یافت شد؛ شیت موردنظر را در یک فایل مستقل انتخاب کنید.');
++  return matching.length ? matching : workbook.sheets.slice(0,1);
++}
+ export interface PersonnelInput { row: number; sheet: string; data: Record<string, string>; issues: string[] }
+ export function identifyPersonnelHeaders(rows: unknown[][], overrides?: PersonnelMapping) {
+   const normalize = normalizeSearchText;
+@@ -47,7 +74,7 @@
+   });
+ }
+ export function parsePersonnelWorkbook(workbook: ParsedWorkbook, mappings: Record<string,PersonnelMapping> = {}) {
+-  const names = ['پرسنل چالاک','پرسنل چالاک 2'].every(n => workbook.rowsBySheet[n]) ? ['پرسنل چالاک','پرسنل چالاک 2'] : workbook.sheets.slice(0,1);
++  const names = personnelWorkbookSheets(workbook);
+   const inputs = names.flatMap(n => parsePersonnelSheet(workbook.rowsBySheet[n], n, mappings[n]));
+   const codes = (n: string) => new Set(inputs.filter(r => r.sheet === n).map(r => r.data.code).filter(Boolean));
+   const main = codes(names[0]), secondary = names[1] ? codes(names[1]) : new Set<string>();
+@@ -71,6 +98,7 @@
+       else if (signatures.size > 1 || owners.length > 1) { status='CONFLICT'; issues.push('کد مشترک با اطلاعات متفاوت؛ نیازمند بررسی انسانی.'); }
+       else if (i > 0) status='DUPLICATE_IN_FILE';
+       else if (issues.length) status='CONFLICT';
++      else if (old?.personnelEffectiveDate && parseBusinessDate(old.personnelEffectiveDate) && parseBusinessDate(options.effectiveDate || '') && parseBusinessDate(options.effectiveDate!)! < parseBusinessDate(old.personnelEffectiveDate)!) { status='NEEDS_REVIEW'; issues.push('تاریخ مؤثر منبع قدیمی‌تر از اطلاعات پذیرفته‌شده است؛ اطلاعات فعلی حفظ شد.'); }
+       else {
+         const candidate: Employee = old ? {...old} : {id:crypto.randomUUID(),code,name:data.name,unit:data.unit||'',username:`user_${code.toLowerCase().replace(/[^a-z0-9]/g,'_')}`,role:'employee',profileId:options.newProfileId||'',employmentStatus:'unknown'};
+         for (const field of ['name','unit','approvedJobTitle','internalJobDescription','shift','employmentStart','employmentEnd'] as const) {
+--- v6.0/functions/api/auth/login.ts
++++ v6.1/functions/api/auth/login.ts
+@@ -53,6 +53,17 @@
+     const stored = await env.CHALAK_DB.get('credential:admin');
+     valid = stored ? await verifyPassword(password, stored) : password === env.ADMIN_PASSWORD;
+     employee = { id: 'emp-admin', name: 'مدیریت ارشد', username: 'admin', code: 'ADMIN-001', role: 'admin', profileId: 'prof-3', unit: 'دفتر مرکزی' };
++    if (valid) {
++      const rawState = await env.CHALAK_DB.get('app_state');
++      const state = rawState ? JSON.parse(rawState) as Record<string, unknown> : {};
++      const employees = Array.isArray(state.pe_employees) ? state.pe_employees as EmployeeRecord[] : [];
++      if (employees.length) {
++        const matches = employees.filter(e => normalizeUsername(e.username) === 'admin');
++        const locked = Array.isArray(state.pe_locked_users) ? state.pe_locked_users.map(String) : [];
++        if (matches.length !== 1 || matches[0].role !== 'admin' || matches[0].employmentStatus === 'inactive' || matches[0].employmentStatus === 'unknown' || locked.includes(matches[0].id) || locked.includes('admin')) return jsonResponse({ error: 'هویت یا دسترسی مدیر در بانک پرسنل فعال نیست.', code: 'admin_identity_inactive' }, 403);
++        employee = matches[0];
++      }
++    }
+   } else {
+     const rawState = await env.CHALAK_DB.get('app_state');
+     const state = rawState ? JSON.parse(rawState) as Record<string, unknown> : {};
+--- v6.0/functions/api/state.ts
++++ v6.1/functions/api/state.ts
+@@ -1,3 +1,5 @@
++import { stateOperationHash } from '../../cloudflare/operationReceipt';
++import { parseBusinessDate } from '../../src/utils/businessDate';
+ import { AuthSession, CloudflareEnv, jsonResponse } from '../../cloudflare/auth';
+ import { CloudState, sanitizeCloudState } from '../../cloudflare/syncState';
+ import { canDelegate, canPerformWorkflowAction, isWithinSupervisorScope, workflowPermissionForTransition, workflowTaskIdentity, type DelegationRecord } from '../../src/utils/workflowAuthorization';
+@@ -620,6 +622,11 @@
+         !['admin', 'supervisor', 'employee'].includes(employee.role)) return false;
+     incomingIds.add(employee.id);
+     const old = existingById.get(employee.id);
++    if (employee.personnelEffectiveDate !== old?.personnelEffectiveDate && employee.personnelEffectiveDate !== undefined) {
++      const incomingDate = parseBusinessDate(employee.personnelEffectiveDate);
++      const previousDate = old?.personnelEffectiveDate ? parseBusinessDate(old.personnelEffectiveDate) : undefined;
++      if (!incomingDate || previousDate && incomingDate < previousDate) return false;
++    }
+     const changed = !old || JSON.stringify(old) !== JSON.stringify(employee);
+     if (!changed) continue;
+     const permission = canImport(actor, 'employee', old || employee, getPermissionPolicy(current));
+@@ -1094,9 +1101,9 @@
+   };
+ }
+ 
+-function responseEnvelope(state: CloudState, meta: StateMeta, session: AuthSession): Response {
++function responseEnvelope(state: CloudState, meta: StateMeta, session: AuthSession, receipt?: {operationId: string; payloadHash: string; acceptedRevision: number}, ignoredLogOperation?: string): Response {
+   const { __operation_receipts: _receipts, ...visibleState } = state;
+-  return jsonResponse({ state: scopedState(visibleState, session), ...meta });
++  return jsonResponse({ state: scopedState(visibleState, session), ...meta, ...(receipt ? { accepted: true, ...receipt } : {}), ...(ignoredLogOperation ? { noMutation: true, ignoredKeys: ['pe_system_logs'], operationId: ignoredLogOperation } : {}) });
+ }
+ 
+ export async function onRequestGet(context: Context): Promise<Response> {
+@@ -1110,7 +1117,7 @@
+       const receipt = receipts.find(item => item.operationId === operationId && item.actorId === data.session!.id);
+       if (!receipt) return jsonResponse({ accepted: false, operationId, revision: meta.revision });
+       const { __operation_receipts: _receipts, ...visibleState } = state;
+-      return jsonResponse({ accepted: true, operationId, state: scopedState(visibleState, data.session), ...meta });
++      return jsonResponse({ accepted: true, operationId, payloadHash: receipt.payloadHash, acceptedRevision: receipt.acceptedRevision, state: scopedState(visibleState, data.session), ...meta });
+     }
+     return responseEnvelope(state, meta, data.session);
+   } catch (error) {
+@@ -1194,14 +1201,14 @@
+   }
+ 
+   const { state: current, meta: currentMeta } = await readState(env, typeof operationId === 'string' ? operationId : undefined);
+-  const payloadHash = operationId ? Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify({ changes, sourceImport, evaluationPatch: body.evaluationPatch === true, employeePatch: body.employeePatch === true, evaluationExpected: body.evaluationExpected, evaluationDeleteIds: body.evaluationDeleteIds }))))).map(byte => byte.toString(16).padStart(2, '0')).join('') : undefined;
++  const payloadHash = operationId ? await stateOperationHash(body as unknown as Record<string, unknown>) : undefined;
+   const receipts = Array.isArray(current.__operation_receipts) ? current.__operation_receipts as Array<Record<string, unknown>> : [];
+   const receipt = operationId && receipts.find(item => item.operationId === operationId);
+   if (receipt) {
+     if (receipt.actorId !== data.session.id) return jsonResponse({ error: 'این شناسه عملیات قبلاً استفاده شده است.', code: 'operation_id_reused', reason: 'operation_id_reused', retryable: false }, 409);
+     if (receipt.payloadHash !== payloadHash) return jsonResponse({ error: 'این شناسه عملیات قبلاً برای تغییر دیگری استفاده شده است.', code: 'operation_id_reused', reason: 'operation_id_reused', retryable: false }, 409);
+     // readState repairs metadata from this receipt before acknowledging replay.
+-    return responseEnvelope(current, currentMeta, data.session);
++    return responseEnvelope(current, currentMeta, data.session, { operationId: String(operationId), payloadHash: String(receipt.payloadHash), acceptedRevision: Number(receipt.acceptedRevision) });
+   }
+   const baseRevision = Number(body.baseRevision);
+   data.diagnostics.baseRevision = Number.isInteger(baseRevision) ? baseRevision : undefined;
+@@ -1243,7 +1250,7 @@
+   // Authentication writes a local system-log entry for every user. These logs
+   // are intentionally absent from non-admin cloud state and are never accepted
+   // as authoritative; acknowledge a logs-only sync without persisting or bumping revision.
+-  if (nonAdminSystemLogsOnly) return responseEnvelope(current, currentMeta, data.session);
++  if (nonAdminSystemLogsOnly) return responseEnvelope(current, currentMeta, data.session, undefined, String(operationId));
+   if (body.evaluationPatch === true) {
+     if (!operationId || !Array.isArray(changes.pe_evaluations)) return jsonResponse({ error: 'Changed-set operations require evaluation records.' }, 400);
+     const updates = changes.pe_evaluations as Evaluation[];
+@@ -1380,7 +1387,7 @@
+   } catch {
+     throw new StateStoreUnavailable('state_metadata_write_temporarily_unavailable', typeof operationId === 'string' ? operationId : undefined, 'kv_metadata_write', 'unknown', Date.now() - data.diagnostics.startedAt);
+   }
+-  return responseEnvelope(next, meta, data.session);
++  return responseEnvelope(next, meta, data.session, operationId ? { operationId: String(operationId), payloadHash: payloadHash!, acceptedRevision: meta.revision } : undefined);
+ }
+ 
+ export function onRequest(): Response {
+--- v6.0/cloudflare/auth.ts
++++ v6.1/cloudflare/auth.ts
+@@ -86,7 +86,7 @@
+     await env.CHALAK_DB.delete(`session:${token}`);
+     return null;
+   }
+-  if (session.username !== 'admin') {
++  {
+     const rawState = await env.CHALAK_DB.get('app_state');
+     let state: Record<string, unknown>;
+     try { state = rawState ? JSON.parse(rawState) as Record<string, unknown> : {}; }
+@@ -94,7 +94,8 @@
+     const employees = Array.isArray(state.pe_employees) ? state.pe_employees as Array<Record<string, unknown>> : [];
+     const employee = employees.find(item => String(item.id) === session.id && normalizeUsername(item.username) === session.username);
+     const lockedUsers = Array.isArray(state.pe_locked_users) ? state.pe_locked_users.map(String) : [];
+-    if (!employee || employee.role !== session.role || lockedUsers.includes(session.id) || lockedUsers.includes(session.username)) {
++    const bootstrap = employees.length === 0 && session.id === 'emp-admin' && session.username === 'admin' && session.role === 'admin';
++    if (!bootstrap && (!employee || employee.role !== session.role || employee.employmentStatus === 'inactive' || employee.employmentStatus === 'unknown' || lockedUsers.includes(session.id) || lockedUsers.includes(session.username))) {
+       await env.CHALAK_DB.delete(`session:${token}`);
+       return null;
+     }
+--- v6.0/cloudflare/operationReceipt.ts
++++ v6.1/cloudflare/operationReceipt.ts
+@@ -0,0 +1,9 @@
++import { sanitizeCloudState } from './syncState';
++export async function stateOperationHash(envelope: Record<string, unknown>): Promise<string> {
++  const payload = { changes: sanitizeCloudState(envelope.state === undefined ? envelope : envelope.state), sourceImport: envelope.sourceImport, evaluationPatch: envelope.evaluationPatch === true, employeePatch: envelope.employeePatch === true, evaluationExpected: envelope.evaluationExpected, evaluationDeleteIds: envelope.evaluationDeleteIds };
++  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(payload))))).map(b => b.toString(16).padStart(2,'0')).join('');
++}
++export function isAcceptedOperation(value: unknown, operationId: string, payloadHash: string): boolean {
++  const v = value as Record<string, unknown> | null;
++  return !!v && v.accepted === true && v.operationId === operationId && v.payloadHash === payloadHash && Number.isInteger(v.acceptedRevision) && Number(v.acceptedRevision) > 0 && Number.isInteger(v.revision) && Number(v.revision) >= Number(v.acceptedRevision) && !!v.state && typeof v.state === 'object' && !Array.isArray(v.state);
++}
