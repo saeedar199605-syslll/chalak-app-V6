@@ -699,3 +699,20 @@ html.light-theme .app-sidebar {
 @media (prefers-reduced-motion: reduce) {
   .app-content > .max-w-7xl { animation: none; }
 }
+
+/* System health panel: explicit colours per theme so banners and statuses stay readable on both light and dark surfaces. */
+.hp-banner { border-radius: 0.75rem; border-width: 1px; border-style: solid; font-weight: 600; }
+.hp-ok { color: #bbf7d0; background: rgba(22, 163, 74, 0.14); border-color: rgba(74, 222, 128, 0.4); }
+.hp-warn { color: #fde68a; background: rgba(217, 119, 6, 0.16); border-color: rgba(251, 191, 36, 0.45); }
+.hp-err { color: #fecdd3; background: rgba(225, 29, 72, 0.16); border-color: rgba(251, 113, 133, 0.45); }
+.hp-text-ok { color: #4ade80; }
+.hp-text-warn { color: #fbbf24; }
+.hp-text-bad { color: #fb7185; }
+.hp-text-muted { color: #94a3b8; }
+html.light-theme .hp-ok { color: #14532d; background: #dcfce7; border-color: #86efac; }
+html.light-theme .hp-warn { color: #7c2d12; background: #ffedd5; border-color: #fdba74; }
+html.light-theme .hp-err { color: #881337; background: #ffe4e6; border-color: #fda4af; }
+html.light-theme .hp-text-ok { color: #15803d; }
+html.light-theme .hp-text-warn { color: #b45309; }
+html.light-theme .hp-text-bad { color: #be123c; }
+html.light-theme .hp-text-muted { color: #475569; }

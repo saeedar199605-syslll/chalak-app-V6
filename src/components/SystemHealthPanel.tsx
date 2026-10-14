@@ -90,7 +90,7 @@ export default function SystemHealthPanel() {
     <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-6 space-y-5" dir="rtl" data-testid="system-health-panel">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+          <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center hp-text-ok">
             <Activity className="w-5 h-5" />
           </div>
           <div>
@@ -108,14 +108,14 @@ export default function SystemHealthPanel() {
         </div>
       </div>
 
-      {error && <div role="alert" className="rounded-xl border border-rose-500/40 bg-rose-500/10 text-rose-300 text-xs p-3">{error}</div>}
+      {error && <div role="alert" className="hp-banner hp-err text-xs p-3">{error}</div>}
 
       {health && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
             <div className="rounded-2xl bg-slate-950/50 border border-slate-800 p-3">
               <div className="text-slate-400">وضعیت ذخیره‌سازی</div>
-              <div className={`font-black mt-1 ${health.mode === 'active' ? 'text-emerald-400' : 'text-amber-400'}`}>{health.mode === 'active' ? 'فعال' : 'متوقف (Frozen)'}</div>
+              <div className={`font-black mt-1 ${health.mode === 'active' ? 'hp-text-ok' : 'hp-text-warn'}`}>{health.mode === 'active' ? 'فعال' : 'متوقف (Frozen)'}</div>
             </div>
             <div className="rounded-2xl bg-slate-950/50 border border-slate-800 p-3">
               <div className="text-slate-400">شماره نسخه داده</div>
@@ -132,30 +132,30 @@ export default function SystemHealthPanel() {
           </div>
 
           {!health.backupTarget.r2Bound && (lastExternal && !staleExternal ? (
-            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-200 text-xs p-3 flex gap-2 items-center">
+            <div className="hp-banner hp-ok text-xs p-3 flex gap-2 items-center">
               <CheckCircle2 className="w-4 h-4 shrink-0" />
               <span>آخرین پشتیبان بیرونی: {formatTehranDateTime(lastExternal.at)} (نسخه {fa(lastExternal.revision ?? 0)}، {KIND_LABELS[lastExternal.kind] || lastExternal.kind}). پشتیبان خودکار روی سرور (R2) فعال نیست.</span>
             </div>
           ) : (
-            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-200 text-xs p-3 flex gap-2 items-start">
+            <div className="hp-banner hp-warn text-xs p-3 flex gap-2 items-start">
               <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>پشتیبان خودکار روی سرور (R2) فعال نیست و {lastExternal ? `آخرین پشتیبان بیرونی بیش از ۴۸ ساعت پیش بوده است (${formatTehranDateTime(lastExternal.at)})` : 'هیچ پشتیبان بیرونی ثبت نشده است'}. «دانلود پشتیبان کامل» را بزنید یا پشتیبان‌گیری زمان‌بندی‌شده با ابزار نگهداری را راه‌اندازی کنید.</span>
             </div>
           ))}
           {health.backupTarget.r2Bound && staleBackup && (
-            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-200 text-xs p-3 flex gap-2 items-start">
+            <div className="hp-banner hp-warn text-xs p-3 flex gap-2 items-start">
               <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{health.lastScheduledBackup ? `آخرین پشتیبان خودکار موفق بیش از ۳۶ ساعت پیش بوده است (${formatTehranDateTime(health.lastScheduledBackup.at)}).` : 'هنوز هیچ پشتیبان خودکار موفقی ثبت نشده است.'} اگر داده‌ی جدیدی ذخیره نشده، تغییری برای پشتیبان‌گیری وجود نداشته است.</span>
             </div>
           )}
           {health.backupTarget.r2Bound && !staleBackup && health.lastScheduledBackup && (
-            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-200 text-xs p-3 flex gap-2 items-center">
+            <div className="hp-banner hp-ok text-xs p-3 flex gap-2 items-center">
               <CheckCircle2 className="w-4 h-4 shrink-0" />
               <span>آخرین پشتیبان خودکار: {formatTehranDateTime(health.lastScheduledBackup.at)} (نسخه {fa(health.lastScheduledBackup.revision ?? 0)}). نگهداری {fa(health.backupTarget.keep)} نسخه‌ی آخر.</span>
             </div>
           )}
           {unsavedProblem && (
-            <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 text-rose-300 text-xs p-3">امروز خطای سرور هنگام ذخیره ثبت شده است؛ مقدار «خطای سرور» را در جدول زیر بررسی کنید.</div>
+            <div className="hp-banner hp-err text-xs p-3">امروز خطای سرور هنگام ذخیره ثبت شده است؛ مقدار «خطای سرور» را در جدول زیر بررسی کنید.</div>
           )}
 
           <div className="overflow-x-auto">
@@ -184,7 +184,7 @@ export default function SystemHealthPanel() {
                   <tr key={i} className="border-t border-slate-800 text-slate-200" title={b.detail}>
                     <td className="p-2">{formatTehranDateTime(b.at)}</td>
                     <td className="p-2">{KIND_LABELS[b.kind] || b.kind}</td>
-                    <td className={`p-2 font-bold ${b.status === 'ok' ? 'text-emerald-400' : b.status === 'failed' ? 'text-rose-400' : 'text-slate-400'}`}>{STATUS_LABELS[b.status] || b.status}</td>
+                    <td className={`p-2 font-bold ${b.status === 'ok' ? 'hp-text-ok' : b.status === 'failed' ? 'hp-text-bad' : 'hp-text-muted'}`}>{STATUS_LABELS[b.status] || b.status}</td>
                     <td className="p-2">{b.revision == null ? '—' : fa(b.revision)}</td>
                     <td className="p-2">{b.bytes == null ? '—' : `${fa(Number(mb(b.bytes)))} مگابایت`}</td>
                   </tr>
