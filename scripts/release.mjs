@@ -31,13 +31,14 @@ export function hashArtifacts(root) {
     const list = fs.statSync(abs).isDirectory() ? walk(abs, root) : [entry];
     for (const f of list) files[f] = sha(fs.readFileSync(path.join(root, f)));
   }
-  for (const f of ['package.json', 'package-lock.json', 'V7-CUTOVER.md', 'V7-READ-ME-FIRST.md'])
+  for (const f of ['package.json', 'package-lock.json', 'V8-CUTOVER.md', 'V8-READ-ME-FIRST.md'])
     if (fs.existsSync(path.join(root, f))) files[f] = sha(fs.readFileSync(path.join(root, f)));
   return Object.fromEntries(Object.entries(files).sort(([a], [b]) => a.localeCompare(b)));
 }
 
 const FORBIDDEN = [/\.dev\.vars$/, /(^|\/)\.env(\..*)?$/, /-private\./, /\.wrangler\//, /node_modules\//];
-export function structuralCheck(root) {
+export function structuralCheck(root, opts = {}) {
+  const r2Enabled = opts.r2Enabled ?? C.R2_BACKUP_ENABLED;
   const problems = [];
   const read = (f) => JSON.parse(fs.readFileSync(path.join(root, f), 'utf8').replace(/^﻿/, ''));
   const strip = (f) => JSON.parse(fs.readFileSync(path.join(root, f), 'utf8').replace(/^﻿/, '').replace(/^\s*\/\/.*$/gm, ''));
@@ -60,6 +61,14 @@ export function structuralCheck(root) {
   const mig = worker.migrations || [];
   if (mig.length !== 1 || mig[0].tag !== C.MIGRATION_TAG || JSON.stringify(mig[0].new_sqlite_classes) !== JSON.stringify([C.DO_CLASS])) problems.push('worker SQLite migration mismatch');
   if (worker.workers_dev !== false) problems.push('worker must not be public (workers_dev=false)');
+  const r2 = worker.r2_buckets || [];
+  if (r2Enabled) {
+    if (r2.length !== 1 || r2[0].binding !== C.R2_BINDING || r2[0].bucket_name !== C.R2_BUCKET) problems.push('worker R2 backup binding mismatch');
+    if (JSON.stringify(worker.triggers?.crons) !== JSON.stringify([C.BACKUP_CRON])) problems.push('worker backup cron mismatch');
+  } else {
+    if (r2.length) problems.push('R2 binding present while R2 backups are disabled');
+    if ((worker.triggers?.crons || []).length) problems.push('cron present while R2 backups are disabled');
+  }
   const prev = pages.env?.preview;
   if (!prev || prev.kv_namespaces || prev.durable_objects || prev.d1_databases || prev.r2_buckets || prev.services) problems.push('preview must exist and carry no bindings');
   if (!fs.existsSync(path.join(root, 'pages/_worker.js/index.js'))) problems.push('pages/_worker.js/index.js missing');
@@ -83,8 +92,8 @@ function seal(root) {
   log(`sealed ${Object.keys(doc.files).length} files`);
 }
 
-export function verify(root) {
-  const bad = structuralCheck(root);
+export function verify(root, opts = {}) {
+  const bad = structuralCheck(root, opts);
   const recorded = fs.existsSync(path.join(root, 'artifact-hashes.json')) ? JSON.parse(fs.readFileSync(path.join(root, 'artifact-hashes.json'), 'utf8')) : null;
   if (!recorded) bad.push('artifact-hashes.json missing');
   else {
@@ -112,7 +121,7 @@ function prepare() {
   fs.writeFileSync(entry, fs.readFileSync(entry, 'utf8').replace(/functionsRoutes_0_\d+/g, 'functionsRoutes_0_0').replace(/\.wrangler\/tmp\/pages-[A-Za-z0-9]+\/functionsRoutes-0\.\d+\.mjs/g, '.wrangler/tmp/pages-build/functionsRoutes-0.mjs'));
   // The Functions build emits its own routing; keep _routes.json from public/ for the static/Functions split.
   fs.copyFileSync(path.join(sourceRoot, 'public/_routes.json'), path.join(rel, 'pages/_routes.json'));
-  fs.writeFileSync(path.join(rel, 'pages/release.json'), JSON.stringify({ name: 'chalak-performance', version: C.VERSION, base: C.BASE.version, storage: 'sqlite-durable-object', protocolVersion: 2 }, null, 2));
+  fs.writeFileSync(path.join(rel, 'pages/release.json'), JSON.stringify({ name: 'chalak-performance', version: C.VERSION, base: C.BASE.version, storage: 'sqlite-durable-object', protocolVersion: 2, features: ['admin-health', 'backup-download', ...(C.R2_BACKUP_ENABLED ? ['scheduled-backup-r2'] : []), 'operator-snapshot', 'restore'] }, null, 2));
   fs.writeFileSync(path.join(rel, 'pages/wrangler.jsonc'), JSON.stringify({
     name: C.PAGES_DEFAULT_NAME, compatibility_date: C.COMPATIBILITY_DATE, compatibility_flags: ['nodejs_compat'], pages_build_output_dir: '.',
     kv_namespaces: [{ binding: C.KV_BINDING, id: C.KV_NAMESPACE_ID }],
@@ -126,14 +135,15 @@ function prepare() {
     name: C.WORKER_NAME, main: 'index.js', compatibility_date: C.COMPATIBILITY_DATE, compatibility_flags: ['nodejs_compat'],
     durable_objects: { bindings: [{ name: C.DO_BINDING, class_name: C.DO_CLASS }] },
     migrations: [{ tag: C.MIGRATION_TAG, new_sqlite_classes: [C.DO_CLASS] }],
-    kv_namespaces: [{ binding: C.KV_BINDING, id: C.KV_NAMESPACE_ID }], workers_dev: false
+    kv_namespaces: [{ binding: C.KV_BINDING, id: C.KV_NAMESPACE_ID }],
+    ...(C.R2_BACKUP_ENABLED ? { r2_buckets: [{ binding: C.R2_BINDING, bucket_name: C.R2_BUCKET }], triggers: { crons: [C.BACKUP_CRON] } } : {}), workers_dev: false
   }, null, 2));
   // scripts/, tools/, docs, package
   fs.mkdirSync(path.join(rel, 'scripts'), { recursive: true });
   for (const f of ['config.mjs', 'release.mjs', 'preflight.mjs', 'deploy.mjs', 'cloudflare-api.mjs']) fs.copyFileSync(path.join(sourceRoot, 'scripts', f), path.join(rel, 'scripts', f));
   fs.mkdirSync(path.join(rel, 'tools'), { recursive: true });
   fs.copyFileSync(path.join(sourceRoot, 'tools/state-transfer.mjs'), path.join(rel, 'tools/state-transfer.mjs'));
-  for (const f of ['V7-CUTOVER.md', 'V7-READ-ME-FIRST.md']) fs.copyFileSync(path.join(sourceRoot, f), path.join(rel, f));
+  for (const f of ['V8-CUTOVER.md', 'V8-READ-ME-FIRST.md']) fs.copyFileSync(path.join(sourceRoot, f), path.join(rel, f));
   fs.writeFileSync(path.join(rel, 'package.json'), JSON.stringify({
     name: 'chalak-performance-release', private: true, version: C.VERSION, type: 'module', engines: { node: '>=' + C.NODE_MAJOR },
     scripts: { verify: 'node scripts/release.mjs verify', preflight: 'node scripts/preflight.mjs', 'deploy:worker': 'node scripts/deploy.mjs worker', 'deploy:pages': 'node scripts/deploy.mjs pages' },

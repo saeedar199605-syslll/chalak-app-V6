@@ -10,7 +10,7 @@ const stripJsonc = (t) => JSON.parse(t.replace(/^﻿/, '').replace(/^\s*\/\/.*$/
 const names = (o) => Object.keys(o || {});
 const BINDING_GROUPS = ['kv_namespaces', 'durable_object_namespaces', 'd1_databases', 'r2_buckets', 'services', 'queue_producers', 'analytics_engine_datasets', 'ai_bindings', 'vectorize_bindings', 'browser_bindings', 'hyperdrive_bindings', 'mtls_certificates', 'send_email_bindings'];
 
-export async function preflight({ accountId, project, token, root, fetchImpl }) {
+export async function preflight({ accountId, project, token, root, fetchImpl, r2Enabled = C.R2_BACKUP_ENABLED }) {
   const get = makeReader({ accountId, token, fetchImpl });
   const checks = [];
   const check = (name, ok, detail = '') => checks.push({ name, ok: !!ok, detail });
@@ -46,6 +46,7 @@ export async function preflight({ accountId, project, token, root, fetchImpl }) 
 
   const kvList = await get('/storage/kv/namespaces?per_page=100');
   check('KV namespace exists', Array.isArray(kvList) && kvList.some(n => n.id === C.KV_NAMESPACE_ID));
+  if (r2Enabled) try { const bucket = await get('/r2/buckets/' + C.R2_BUCKET); check('R2 backup bucket exists', (bucket?.name || bucket?.buckets?.[0]?.name) === C.R2_BUCKET, 'create it before deploying the Worker: wrangler r2 bucket create ' + C.R2_BUCKET); } catch (e) { check('R2 backup bucket exists', false, 'create it before deploying the Worker (' + e.message + ')'); }
   const namespaces = await get('/workers/durable_objects/namespaces');
   const ns = (namespaces || []).filter(n => n.class === C.DO_CLASS);
   check('Durable Object class namespace exists once', ns.length <= 1, `found=${ns.length}`);
@@ -66,7 +67,7 @@ export async function preflight({ accountId, project, token, root, fetchImpl }) 
     check('Worker secret STORAGE_MAINTENANCE_TOKEN exists', sn.includes('STORAGE_MAINTENANCE_TOKEN'), 'name only');
     const settings = await get('/workers/scripts/' + C.WORKER_NAME + '/settings');
     const bindings = settings?.bindings || [];
-    const unknown = bindings.filter(b => !((b.type === 'kv_namespace' && b.name === C.KV_BINDING) || (b.type === 'durable_object_namespace' && b.name === C.DO_BINDING) || b.type === 'secret_text'));
+    const unknown = bindings.filter(b => !((b.type === 'kv_namespace' && b.name === C.KV_BINDING) || (b.type === 'durable_object_namespace' && b.name === C.DO_BINDING) || (r2Enabled && b.type === 'r2_bucket' && b.name === C.R2_BINDING) || b.type === 'secret_text'));
     check('Worker has no unknown bindings or variables', unknown.length === 0, unknown.map(b => b.name).join(','));
   } else {
     check('Worker not yet deployed (first deploy; STORAGE_MAINTENANCE_TOKEN must be created by owner)', true, 'informational');

@@ -1,4 +1,4 @@
-// V7 offline acceptance: package integrity, deployment gate, read-only preflight. Never contacts Cloudflare.
+// V8 offline acceptance: package integrity, deployment gate, read-only preflight. Never contacts Cloudflare.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -19,10 +19,11 @@ const ok = (name: string) => { results[name] = 'PASS'; console.log('PASS ' + nam
 
 // 1. sealed package verifies and every hash is stable
 assert.deepEqual(verify(release), []);
+assert(verify(release, { r2Enabled: true }).some((p: string) => /R2/.test(p)), 'structure check must notice a worker without the R2 binding when R2 is enabled');
 ok('package-verifies');
 
 // 2. tampering with any shipped executable is detected
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'v7-tamper-'));
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'v8-tamper-'));
 fs.cpSync(release, tmp, { recursive: true, filter: s => !s.includes('node_modules') });
 fs.appendFileSync(path.join(tmp, 'worker/index.js'), '\n//x');
 assert(verify(tmp).some((p: string) => p.includes('hash mismatch: worker/index.js')));
@@ -38,11 +39,11 @@ ok('tamper-and-forbidden-files-detected');
 
 // 3. bundles carry the exact release identity
 const rel = JSON.parse(fs.readFileSync(path.join(release, 'pages/release.json'), 'utf8'));
-assert.equal(rel.version, '7.0.0'); assert.equal(rel.storage, 'sqlite-durable-object'); assert.equal(rel.base, '6.2.0');
+assert.equal(rel.version, '8.0.0'); assert.equal(rel.storage, 'sqlite-durable-object'); assert.equal(rel.base, '7.0.0'); assert(rel.features.includes('operator-snapshot') && rel.features.includes('restore') && !rel.features.includes('scheduled-backup-r2'));
 const workerJs = fs.readFileSync(path.join(release, 'worker/index.js'), 'utf8');
-assert(/version:\s*"7\.0\.0"/.test(workerJs)); assert(workerJs.includes('ChalakState')); assert(workerJs.includes('blockConcurrencyWhile')); assert(workerJs.includes('transactionSync'));
+assert(/version:\s*"8\.0\.0"/.test(workerJs)); assert(workerJs.includes('ChalakState')); assert(workerJs.includes('runScheduledBackup') && workerJs.includes('scheduled(') && workerJs.includes('/api/admin/health') && workerJs.includes('/api/backup')); assert(workerJs.includes('blockConcurrencyWhile')); assert(workerJs.includes('transactionSync'));
 const pagesJs = fs.readFileSync(path.join(release, 'pages/_worker.js/index.js'), 'utf8');
-assert(pagesJs.includes('chalak-authoritative-state-v1'));
+assert(pagesJs.includes('chalak-authoritative-state-v1')); assert(pagesJs.includes('admin/health') || pagesJs.includes('/api/admin/health')); assert(pagesJs.includes('api/backup') || pagesJs.includes('/api/backup'));
 ok('release-identity');
 
 // 4. no operational state is written to KV by the shipped Pages bundle
@@ -77,12 +78,12 @@ const live = (over: any = {}) => {
     calls.push({ method: init.method, url });
     const u = new URL(url).pathname.replace(/^\/client\/v4\/accounts\/[^/]+/, '');
     let result: any;
-    if (u.startsWith('/pages/projects/')) result = data.project; else if (u.startsWith('/storage/kv/namespaces')) result = data.kv; else if (u === '/workers/durable_objects/namespaces') result = data.dos; else if (u === '/workers/scripts') result = data.scripts; else if (u.endsWith('/secrets')) result = data.secrets; else if (u.endsWith('/settings')) result = data.settings; else return new Response(JSON.stringify({ success: false, errors: [{ code: 404 }] }), { status: 404 });
+    if (u.startsWith('/pages/projects/')) result = data.project; else if (u.startsWith('/storage/kv/namespaces')) result = data.kv; else if (u === '/workers/durable_objects/namespaces') result = data.dos; else if (u === '/workers/scripts') result = data.scripts; else if (u.endsWith('/secrets')) result = data.secrets; else if (u.endsWith('/settings')) result = data.settings; else if (u === '/r2/buckets/chalak-backups' && data.r2 !== false) result = data.r2 ?? { name: 'chalak-backups' }; else return new Response(JSON.stringify({ success: false, errors: [{ code: 404 }] }), { status: 404 });
     return new Response(JSON.stringify({ success: true, result }), { status: 200 });
   };
   return { fetchImpl, calls };
 };
-const run = async (over: any = {}) => { const l = live(over); const checks = await preflight({ accountId: 'a'.repeat(32), project: 'p', token: 'SECRET-TOKEN-VALUE', root: release, fetchImpl: l.fetchImpl }); return { checks, calls: l.calls }; };
+const run = async (over: any = {}, r2Enabled = false) => { const l = live(over); const checks = await preflight({ accountId: 'a'.repeat(32), project: 'p', token: 'SECRET-TOKEN-VALUE', root: release, fetchImpl: l.fetchImpl, r2Enabled }); return { checks, calls: l.calls }; };
 const base = await run();
 assert(base.checks.every((c: any) => c.ok), JSON.stringify(base.checks.filter((c: any) => !c.ok)));
 assert(base.calls.length > 0 && base.calls.every(c => c.method === 'GET'));
@@ -98,15 +99,22 @@ const drift: Record<string, any> = {
   'pages binding points elsewhere': { dos: [{ id: 'ns2', class: 'ChalakState', script: C.WORKER_NAME, use_sqlite: true }] },
   'worker unknown secret': { secrets: [{ name: 'STORAGE_MAINTENANCE_TOKEN' }, { name: 'LEAKED' }] },
   'worker missing maintenance secret': { secrets: [] },
-  'worker unknown binding': { settings: { bindings: [{ type: 'r2_bucket', name: 'B' }] } }
+  'worker unknown binding': { settings: { bindings: [{ type: 'r2_bucket', name: 'B' }] } },
+  'R2 binding present while R2 backups are disabled': { settings: { bindings: [{ type: 'kv_namespace', name: 'CHALAK_DB' }, { type: 'durable_object_namespace', name: 'CHALAK_STATE' }, { type: 'r2_bucket', name: 'CHALAK_BACKUPS' }, { type: 'secret_text', name: 'STORAGE_MAINTENANCE_TOKEN' }] } },
+  'worker has an unexpected R2 binding name': { settings: { bindings: [{ type: 'kv_namespace', name: 'CHALAK_DB' }, { type: 'durable_object_namespace', name: 'CHALAK_STATE' }, { type: 'r2_bucket', name: 'OTHER' }, { type: 'secret_text', name: 'STORAGE_MAINTENANCE_TOKEN' }] } }
 };
 for (const [name, over] of Object.entries(drift)) { const r = await run(over); assert(r.checks.some((c: any) => !c.ok), 'preflight did not stop for: ' + name); }
+// R2 mode (opt-in): the same preflight must additionally require the bucket and the exact binding
+const r2Bindings = { settings: { bindings: [{ type: 'kv_namespace', name: 'CHALAK_DB' }, { type: 'durable_object_namespace', name: 'CHALAK_STATE' }, { type: 'r2_bucket', name: 'CHALAK_BACKUPS' }, { type: 'secret_text', name: 'STORAGE_MAINTENANCE_TOKEN' }] } };
+assert((await run(r2Bindings, true)).checks.every((c: any) => c.ok), 'R2-enabled preflight should pass with bucket and binding');
+assert((await run({ ...r2Bindings, r2: false }, true)).checks.some((c: any) => !c.ok && /R2/.test(c.name)), 'missing bucket must stop an R2-enabled preflight');
+assert((await run({ settings: { bindings: [{ type: 'kv_namespace', name: 'CHALAK_DB' }, { type: 'durable_object_namespace', name: 'CHALAK_STATE' }, { type: 'r2_bucket', name: 'OTHER' }, { type: 'secret_text', name: 'STORAGE_MAINTENANCE_TOKEN' }] } }, true)).checks.some((c: any) => !c.ok));
 ok('preflight-read-only-and-fails-closed');
 
 // 7. identity of the base and sealed hash set
-assert.equal(C.BASE.zipSha256, '8E3AA6733BB97D7783A52B1B4F268E6F31844131F80969CA8499FE5CA3FA795A');
+assert.equal(C.BASE.version, '7.0.0'); assert.equal(C.BASE.gitCommit, '15bddd2');
 assert(Object.keys(hashArtifacts(release)).length > 50);
 ok('base-identity');
 
-fs.writeFileSync('tests/evidence/v7-offline-acceptance.json', JSON.stringify({ version: '7.0.0', results }, null, 2));
-console.log('V7 OFFLINE ACCEPTANCE: ' + Object.keys(results).length + ' groups PASS');
+fs.writeFileSync('tests/evidence/v8-offline-acceptance.json', JSON.stringify({ version: '8.0.0', results }, null, 2));
+console.log('V8 OFFLINE ACCEPTANCE: ' + Object.keys(results).length + ' groups PASS');

@@ -183,9 +183,19 @@ if (action === "seal") {
   const backup = await verifySnapshot(await request(url, { action, expectedRevision: Number(revision) }));
   fs.writeFileSync(out, JSON.stringify(backup));
   console.log(JSON.stringify({ backup: out, revision: backup.meta.revision, sha256: backup.sha256, counts: backup.counts }));
+} else if (action === "snapshot") {
+  const [url, out] = args;
+  const snapshot = await verifySnapshot(await request(url, { action }));
+  fs.writeFileSync(out, JSON.stringify(snapshot));
+  console.log(JSON.stringify({ backup: out, revision: snapshot.meta.revision, sha256: snapshot.sha256, counts: snapshot.counts }));
+} else if (action === "restore") {
+  const [url, file, revision, execute] = args;
+  if (execute !== "--execute") throw Error("Explicit --execute and prior owner approval required; the authority must already be frozen and a fresh export taken");
+  const backup = await verifySnapshot(await read(file));
+  console.log(JSON.stringify(await request(url, { action, backup, expectedRevision: Number(revision), confirmSha256: backup.sha256 })));
 } else if (action === "rollback-kv") {
   const [file, out] = args;
   const backup = await verifySnapshot(await read(file));
   fs.writeFileSync(out, JSON.stringify([{ key: "app_state", value: JSON.stringify(backup.state) }, { key: "app_state_meta", value: JSON.stringify(backup.meta) }]));
   console.log(JSON.stringify({ stagedOnly: true, output: out, revision: backup.meta.revision, sha256: backup.sha256, note: "No KV write or deployment performed; traffic gate and owner approval required before remote restore" }));
-} else throw Error("Actions: seal STATE META OUT | verify BACKUP | dry-run URL BACKUP | migrate URL BACKUP --execute | freeze/activate URL REV --execute | export URL REV OUT | rollback-kv BACKUP OUT");
+} else throw Error("Actions: seal STATE META OUT | verify BACKUP | dry-run URL BACKUP | migrate URL BACKUP --execute | freeze/activate URL REV --execute | export URL REV OUT | snapshot URL OUT | restore URL BACKUP CURRENT_REV --execute | rollback-kv BACKUP OUT");

@@ -1,7 +1,7 @@
 {
   "name": "chalak-performance",
   "private": true,
-  "version": "7.0.0",
+  "version": "8.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -19,7 +19,7 @@
     "storage:dev": "wrangler dev --config storage-worker/wrangler.jsonc",
     "release:prepare": "node scripts/release.mjs prepare",
     "release:verify": "node scripts/release.mjs verify",
-    "test:v7": "node tests/run-v7.mjs"
+    "test:v8": "node tests/run-v8.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.18.0",

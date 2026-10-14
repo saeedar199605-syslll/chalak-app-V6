@@ -1,6 +1,6 @@
 // Single source of truth for the V7 two-service topology. Every script and test imports this.
-export const VERSION = '7.0.0';
-export const BASE = { version: '6.2.0', zipSha256: '8E3AA6733BB97D7783A52B1B4F268E6F31844131F80969CA8499FE5CA3FA795A' };
+export const VERSION = '8.0.0';
+export const BASE = { version: '7.0.0', gitCommit: '15bddd2', note: 'V7 as deployed to production (branch main of chalak-app-V6)' };
 export const WRANGLER_VERSION = '4.131.2';
 export const NODE_MAJOR = 24;
 export const COMPATIBILITY_DATE = '2026-09-14';
@@ -12,6 +12,11 @@ export const DO_OBJECT_NAME = 'chalak-authoritative-state-v1';
 export const WORKER_NAME = 'chalak-state-authority';
 export const PAGES_DEFAULT_NAME = 'chalak-performance';
 export const MIGRATION_TAG = 'v6.2-sqlite-v1';
+// Scheduled R2 backups are optional. Flip to true only after the bucket exists and the token may use R2.
+export const R2_BACKUP_ENABLED = false;
+export const R2_BINDING = 'CHALAK_BACKUPS';
+export const R2_BUCKET = 'chalak-backups';
+export const BACKUP_CRON = '0 0 * * *';
 export const PAGES_SECRETS_REQUIRED = ['ADMIN_PASSWORD'];
 export const PAGES_VARS_KNOWN = ['ADMIN_PASSWORD', 'GEMINI_API_KEY', 'EMAIL_INGEST_WEBHOOK_SECRET', 'EMAIL_INGEST_ALLOWED_SENDERS', 'STORAGE_MAINTENANCE_TOKEN'];
 export const WORKER_SECRETS_KNOWN = ['STORAGE_MAINTENANCE_TOKEN'];

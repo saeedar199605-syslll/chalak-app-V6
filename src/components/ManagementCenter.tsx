@@ -91,6 +91,7 @@ import {
 } from '../utils/manualAccessManager';
 import { formatTehranDateTime, getCurrentJalaliSeasonLabel, getTehranGregorianDateKey } from '../utils/iranDate';
 import { calculateWeightedScoreMean } from '../utils/scoreSemantics';
+import SystemHealthPanel from './SystemHealthPanel';
 
 export interface SystemLog {
   id: string;
@@ -3251,6 +3252,7 @@ export default function ManagementCenter({
       {/* ========================================================================= */}
       {(activeSectionTab === 'backup' || activeSectionTab === 'all') && (
         <div className="space-y-6">
+          {currentUser.role === 'admin' && <SystemHealthPanel />}
 
           {/* 1. TOP HEADER & METRIC SUMMARY CARDS */}
           <div className="bg-gradient-to-r from-slate-900 via-teal-950/40 to-slate-900 border border-teal-500/30 rounded-3xl p-6 shadow-xl">
